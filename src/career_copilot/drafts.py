@@ -180,6 +180,22 @@ def reject(store: Store, draft_id: int, note: str = "") -> dict:
     return {"draft_id": draft_id, "status": "rejected"}
 
 
+def revoke(store: Store, draft_id: int, reason: str = "") -> dict:
+    """Human-only. Sends an approved-but-not-yet-done draft back to pending."""
+    row = _row(store, draft_id)
+    if row["status"] != "approved":
+        raise DraftError(f"draft {draft_id} is '{row['status']}'; only approved drafts can be revoked")
+    now = utcnow()
+    with store.transaction() as conn:
+        conn.execute(
+            "UPDATE drafts SET status = 'pending', reviewed_at = NULL, reviewer_note = '', approved_hash = NULL, "
+            "updated_at = ? WHERE id = ?",
+            (now, draft_id),
+        )
+        store.audit("human", "draft.revoke", f"draft:{draft_id}", {"reason": reason}, conn=conn)
+    return public_view(_row(store, draft_id))
+
+
 def mark_executed(store: Store, draft_id: int, actor: str, note: str = "") -> dict:
     row = _row(store, draft_id)
     if row["status"] != "approved":

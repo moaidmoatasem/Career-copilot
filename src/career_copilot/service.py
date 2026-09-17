@@ -743,6 +743,12 @@ class Copilot:
                                 (status, max(1, min(limit, 100))))
         return {"count": len(rows), "drafts": [drafts.public_view(r) for r in rows]}
 
+    def get_draft(self, draft_id: int) -> dict:
+        row = self.store.one("SELECT * FROM drafts WHERE id = ?", (draft_id,))
+        if row is None:
+            raise CopilotError(f"draft {draft_id} not found")
+        return drafts.public_view(row)
+
     def how_to_execute(self, row: dict) -> str:
         kind, target = row["kind"], row["target_ref"]
         if kind == "message_reply" and target.startswith("inbox:"):
@@ -790,6 +796,12 @@ class Copilot:
     def reject_draft(self, draft_id: int, note: str = "") -> dict:
         try:
             return drafts.reject(self.store, draft_id, note)
+        except drafts.DraftError as exc:
+            raise CopilotError(str(exc)) from exc
+
+    def revoke_draft(self, draft_id: int, reason: str = "") -> dict:
+        try:
+            return drafts.revoke(self.store, draft_id, reason)
         except drafts.DraftError as exc:
             raise CopilotError(str(exc)) from exc
 
