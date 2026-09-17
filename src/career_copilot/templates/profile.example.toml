@@ -1,0 +1,46 @@
+# Career Copilot profile. Lives only on your machine (~/.career-copilot/profile.toml).
+# Job scores refresh automatically when you save changes.
+
+[candidate]
+name = "Your Name"                                   # used to recognise your own messages in the export
+linkedin_url = "https://www.linkedin.com/in/your-handle"
+seniority = "senior"                                 # intern | junior | mid | senior | lead | manager | principal | head | director
+acceptable_seniority = ["senior", "lead"]            # levels that count as a full fit
+premium = false                                      # LinkedIn Premium raises the connection-note limit to 300
+
+[targets]
+titles = ["Senior QA Engineer", "Senior Test Automation Engineer", "QA Lead"]
+locations = ["United Arab Emirates", "Saudi Arabia", "Egypt"]   # countries or cities
+remote_ok = false
+exclude_title_keywords = ["intern", "junior"]
+
+[skills]
+# Only list skills you can defend in an interview. Names are matched against a built-in taxonomy.
+have = ["test automation", "api testing", "python"]
+learning = ["llm"]                                   # counts as half credit while you learn it
+
+[skills.aliases]
+# "your skill" = ["other ways job posts write it"]
+# "tmf open apis" = ["tmf620", "tmf622"]
+
+[tiers]
+matched = 75       # apply now
+promising = 55     # worth tailoring for
+close = 35         # reachable after closing specific skill gaps
+
+[learning]
+hours_per_week = 6
+
+[privacy]
+retention_days = 90   # inbox previews and news older than this are deleted automatically
+
+[news]
+interests = ["test automation", "api testing", "ai testing"]
+
+[[news.feeds]]
+name = "Martin Fowler"
+url = "https://martinfowler.com/feed.atom"
+
+[[news.feeds]]
+name = "Playwright releases"
+url = "https://github.com/microsoft/playwright/releases.atom"
