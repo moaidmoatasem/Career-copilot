@@ -1,0 +1,14 @@
+# personal data — never commit
+profile.toml
+my-profile.toml
+*.db
+*.db-wal
+*.db-shm
+imports/
+
+__pycache__/
+.venv/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
