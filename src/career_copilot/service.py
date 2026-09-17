@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import drafts, emails, export, learning, news, profile_audit
+from . import drafts, emails, export, gmail, learning, news, profile_audit
 from .config import LIMITS, ConfigError, Profile, home_dir, load_profile, profile_file
 from .safety import clean_text, prepare_untrusted
 from .scoring import score_job
@@ -35,6 +35,7 @@ def _iso_days_ago(days: int) -> str:
 
 class Copilot:
     fetch_feed = staticmethod(news.fetch_feed)  # replaced in tests
+    fetch_gmail = staticmethod(gmail.fetch_messages)  # replaced in tests
 
     def __init__(self, home: Path | None = None) -> None:
         self.home = (home or home_dir()).expanduser()
@@ -294,6 +295,17 @@ class Copilot:
             raise CopilotError("email body is over 500 KB; pass the plain-text version")
         self.maybe_sweep()
         parsed = emails.parse_email(sender or "", subject or "", body, received_at)
+        result = self._store_parsed_email(parsed)
+        self.store.audit("assistant", "email.ingest", "", {
+            "kind": parsed.kind, "jobs_added": len(result["jobs_added"]),
+            "jobs_seen_again": result["jobs_already_known"],
+            "inbox_items": len(result["inbox_item_ids"]), "news_added": result["news_added"],
+            "flag_types": sorted({f["type"] for f in parsed.flags}),
+        })
+        return result
+
+    def _store_parsed_email(self, parsed: emails.EmailParseResult) -> dict:
+        """Persist one parsed email. Shared by `ingest_email` and `sync_gmail`."""
         added, seen_again = [], 0
         for job in parsed.jobs:
             job_id, created = self._upsert_job(
@@ -314,11 +326,6 @@ class Copilot:
                 (utcnow(), f"linkedin:{external_id}"),
             )
         news_added = sum(self._insert_news(item) for item in parsed.news_items)
-        self.store.audit("assistant", "email.ingest", "", {
-            "kind": parsed.kind, "jobs_added": len(added), "jobs_seen_again": seen_again,
-            "inbox_items": len(inbox_ids), "news_added": news_added,
-            "flag_types": sorted({f["type"] for f in parsed.flags}),
-        })
         result: dict = {
             "kind": parsed.kind,
             "jobs_added": added,
@@ -331,6 +338,83 @@ class Copilot:
             result["flags"] = parsed.flags
             result["_notice"] = UNTRUSTED_NOTICE
         return result
+
+    def sync_gmail(self, since_days: int = 7, max_messages: int = 50) -> dict:
+        """Read recent job-alert mail straight from Gmail, so bodies never pass through the chat.
+
+        Returns counts and the jobs added — never message bodies. What gets read is fixed by
+        `gmail.ALERT_SENDERS`; the caller only picks the window.
+        """
+        if not 1 <= since_days <= 365:
+            raise CopilotError("since_days must be between 1 and 365")
+        if not 1 <= max_messages <= 200:
+            raise CopilotError("max_messages must be between 1 and 200")
+        self.maybe_sweep()
+        try:
+            messages = self.fetch_gmail(self.home, since_days, max_messages)
+        except gmail.GmailError as exc:
+            raise CopilotError(str(exc)) from exc
+        except OSError as exc:
+            raise CopilotError(f"Gmail request failed: {str(exc)[:200]}") from exc
+
+        jobs_added: list[dict] = []
+        jobs_known = inbox_items = news_added = skipped = 0
+        flag_types: set[str] = set()
+        kinds: dict[str, int] = {}
+        for message in messages:
+            if self.store.one(
+                "SELECT message_id FROM synced_messages WHERE message_id = ?", (message.message_id,)
+            ):
+                skipped += 1
+                continue
+            parsed = emails.parse_email(
+                message.sender, message.subject, message.body, message.received_at or None
+            )
+            stored = self._store_parsed_email(parsed)
+            jobs_added.extend(stored["jobs_added"])
+            jobs_known += stored["jobs_already_known"]
+            inbox_items += len(stored["inbox_item_ids"])
+            news_added += stored["news_added"]
+            flag_types.update(f["type"] for f in parsed.flags)
+            kinds[parsed.kind] = kinds.get(parsed.kind, 0) + 1
+            self.store.execute(
+                "INSERT OR REPLACE INTO synced_messages(message_id, synced_at) VALUES (?, ?)",
+                (message.message_id, utcnow()),
+            )
+
+        self.store.set_meta("gmail_last_sync", utcnow())
+        self.store.audit("assistant", "gmail.sync", "", {
+            "window_days": since_days, "messages_read": len(messages), "already_synced": skipped,
+            "jobs_added": len(jobs_added), "inbox_items": inbox_items, "news_added": news_added,
+            "flag_types": sorted(flag_types),
+        })
+        result: dict = {
+            "messages_read": len(messages),
+            "already_synced": skipped,
+            "kinds": kinds,
+            "jobs_added": jobs_added,
+            "jobs_already_known": jobs_known,
+            "inbox_items_added": inbox_items,
+            "news_added": news_added,
+        }
+        if flag_types:
+            result["flag_types"] = sorted(flag_types)
+            result["_notice"] = UNTRUSTED_NOTICE
+        if not messages:
+            result["notes"] = [
+                f"No mail from {', '.join(gmail.ALERT_SENDERS)} in the last {since_days} days."
+            ]
+        return result
+
+    def gmail_status(self) -> dict:
+        """Whether Gmail is connected, and when it was last synced."""
+        return {
+            "connected": gmail.token_file(self.home).exists(),
+            "last_sync": self.store.get_meta("gmail_last_sync") or "",
+            "messages_synced": self.store.scalar("SELECT COUNT(*) FROM synced_messages") or 0,
+            "senders": list(gmail.ALERT_SENDERS),
+            "scope": gmail.SCOPE,
+        }
 
     def import_linkedin_export(self, file_name: str) -> dict:
         self.imports_dir.mkdir(parents=True, exist_ok=True)
