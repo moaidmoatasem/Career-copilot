@@ -79,6 +79,7 @@ def cmd_init(_: argparse.Namespace) -> int:
     print(f"  2. Put your LinkedIn data export ZIP in: {home / 'imports'}")
     print("  3. Add this to Claude Desktop (Settings → Developer → Edit Config), then fully restart Claude:\n")
     print(textwrap.indent(json.dumps(claude_config_snippet(), indent=2), "     "))
+    print(f"\n  4. Review and approve drafts with `career-copilot console` (a browser page) or `career-copilot review` (a terminal).")
     return 0
 
 
@@ -220,6 +221,11 @@ def cmd_purge(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_console(args: argparse.Namespace) -> int:
+    from . import console
+    return console.run(open_browser=not args.no_browser)
+
+
 def cmd_claude_config(_: argparse.Namespace) -> int:
     print(json.dumps(claude_config_snippet(), indent=2))
     return 0
@@ -296,6 +302,9 @@ def main(argv: list[str] | None = None) -> int:
     sync.add_argument("--max", type=int, default=50, dest="max_messages", help="message cap (default 50)")
     sync.set_defaults(func=cmd_sync)
     sub.add_parser("claude-config", help="print the Claude Desktop config snippet").set_defaults(func=cmd_claude_config)
+    console = sub.add_parser("console", help="open the local approval web app (localhost only)")
+    console.add_argument("--no-browser", action="store_true", help="print the link instead of opening it")
+    console.set_defaults(func=cmd_console)
     args = parser.parse_args(argv)
     try:
         return args.func(args)

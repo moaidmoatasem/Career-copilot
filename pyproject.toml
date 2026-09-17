@@ -6,10 +6,10 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
-dependencies = ["mcp>=2.2,<3"]
+dependencies = ["mcp>=2.2,<3", "starlette>=1.0", "uvicorn>=0.34"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]
 # Read-only Gmail sync. Optional: everything else works without these.
 gmail = [
   "google-api-python-client>=2.120",

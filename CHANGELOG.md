@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Copilot Console.** `career-copilot console` opens a localhost-only web app — Today, Review,
+  Jobs, Inbox, Data & privacy — with a one-time launch link. It talks only to the local database:
+  no route reaches Claude or LinkedIn, and (like the MCP server) it has no "send" capability
+  anywhere in it. Numbers and links in a draft must be confirmed individually before it can be
+  approved; safety flags need an explicit acknowledgement. The review screen is fully
+  keyboard-operable (`a` approve, `e` edit, `r` reject, `j`/`k` next/previous, `?` for shortcuts).
+  `career-copilot review` stays available at parity as the terminal-only alternative.
+- Session security for the Console: binds `127.0.0.1` only, a single-use launch token exchanged
+  for an HttpOnly/SameSite=Strict session cookie, a 15-minute idle lock, Host/Origin header
+  checks against DNS rebinding and cross-site requests, and a strict same-origin
+  Content-Security-Policy (no CDN, no inline script). External text (job descriptions, inbox
+  previews) is always rendered as escaped plain text, never HTML, and URLs in it are never
+  auto-linked.
+- `drafts.revoke()` / `Copilot.revoke_draft()` send an approved-but-not-yet-done draft back to
+  pending, and `Copilot.get_draft()` fetches one draft by id — both needed by the Console's
+  Review screen, both human-only like approve/reject.
 - **Read-only Gmail sync.** `career-copilot gmail-auth` connects Gmail with the
   `gmail.readonly` scope, and `career-copilot sync` (or the `sync_gmail` tool) reads recent
   job-alert mail straight into the local database, so message bodies no longer pass through the
@@ -29,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ingest_email` and `sync_gmail` now share one storage path (`_store_parsed_email`), so both
   routes tier jobs, flag scams and dedupe identically.
+- `starlette` and `uvicorn` (already pulled in transitively by `mcp`) are now direct dependencies,
+  for the Console; `httpx` is a `dev` extra so its routes can be tested with Starlette's TestClient.
 - CI also installs the `gmail` extra, so those paths are tested rather than skipped.
 - `.gitignore` covers `gmail-credentials.json`, `gmail-token.json` and `.env`.
 - README documents the Windows and macOS locations of `claude_desktop_config.json`.

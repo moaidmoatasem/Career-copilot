@@ -85,14 +85,39 @@ enabled, Claude passes email text to `ingest_email`.
 ## Daily workflow
 
 1. **Triage** (Claude): runs `sync_gmail` (or passes emails to `ingest_email`), lists new jobs by tier and messages that need you, and drafts replies.
-2. **Approve** (you, in a terminal):
+2. **Approve** (you, in the Console or a terminal):
    ```bash
+   uv run career-copilot console   # opens a localhost-only approval page in your browser
+   # or, at parity, from a shell:
    uv run career-copilot review    # approve, edit & approve, or reject each draft
    ```
-   Numbers in a draft are highlighted so you can confirm they're real and traceable. Profile edits show a diff.
-3. **Act** (you, on LinkedIn): paste and send/post/apply. Tell Claude it's done, or run `uv run career-copilot done <draft_id>`.
+   Numbers and links in a draft must be confirmed one by one before you can approve; safety flags need an
+   explicit acknowledgement. Profile edits show a diff.
+3. **Act** (you, on LinkedIn): paste and send/post/apply. Tell Claude it's done, mark it in the Console, or run `uv run career-copilot done <draft_id>`.
 
 Other prompts: **Weekly career review**, **Job deep dive** (needs a job id), **Profile refresh**.
+
+## Copilot Console
+
+`career-copilot console` starts a small local web app — Today, Review, Jobs, Inbox, and Data & privacy —
+and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
+Claude and it never reaches LinkedIn. There is no "send", "post" or "apply" button anywhere in it: approving
+a draft only moves it to *Ready to do*, where you copy the text and act on LinkedIn yourself.
+
+- **Binds `127.0.0.1` only**, with a random free port, and the one-time launch link works once.
+- The session locks after 15 minutes idle. There's no approval PIN yet (tracked as an open decision) — unlocking
+  means running `career-copilot console` again for a fresh link.
+- Host and Origin headers are checked on every request (closes DNS rebinding and cross-site requests), and a
+  strict Content-Security-Policy allows only this server's own same-origin CSS/JS — no CDN, no inline script.
+- Job descriptions and inbox previews are always shown as escaped plain text, never as HTML, and URLs inside
+  them are never auto-linked.
+- Fully keyboard-operable on the review screen: `a` approve, `e` edit, `r` focus the reject reason, `j`/`s`
+  next draft, `k` previous, `?` for the shortcut list.
+- `career-copilot review` (the terminal reviewer) stays available at parity — useful when the Console isn't
+  running, or as the one surface a browser automation agent can't reach.
+
+Known gaps, deliberately out of scope for this first pass: no approval PIN, Settings/profile.toml editing,
+Career path, Profile audit, Network and News screens (still terminal/Claude-only for now), and no phone mode.
 
 For the profile audit, referrals and replies owed, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and ask Claude to import it.
 
@@ -102,7 +127,7 @@ For the profile audit, referrals and replies owed, request your export in Linked
 |---|---|
 | Account takeover / restriction | No LinkedIn password, cookies or automation. Nothing touches LinkedIn's servers. |
 | Prompt injection in emails, posts, job ads | External text is cleaned (hidden HTML, invisible characters) and flagged; the server instructions tell the model to treat it as data. |
-| Agent acting without you | No approve/send tools exist in the MCP server. Approval only works from an interactive terminal (`review` refuses piped input). |
+| Agent acting without you | No approve/send tools exist in the MCP server or anywhere in the Console. Approval only works from an interactive terminal (`review` refuses piped input) or the Console, which binds `127.0.0.1` behind a one-time launch link and an idle-locked session. |
 | Draft changed after approval | Approval stores a SHA-256 of the exact text; `mark_executed` refuses if it changed. |
 | Data exfiltration | The server only fetches the https feeds listed in your profile; the model can't make it call arbitrary URLs. Gmail sync is read-only and limited to a fixed sender allowlist, so the model can't point it at the rest of your mailbox. Imports are confined to the `imports/` folder. Drafts with links or contact details are flagged. |
 | Recruitment scams | Fee requests, Western Union, codes/OTPs, passport/bank requests are flagged. |
@@ -134,8 +159,12 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 
 ## Roadmap
 
-- **Next:** a localhost approval page, packaging as a one-click Claude Desktop extension, and pulling full job descriptions from the Gulf boards (Adzuna covers none of the Gulf or Egypt).
-- **Later:** official *Share on LinkedIn* posting for approved posts (OAuth, `w_member_social`; tokens last 60 days and need manual re-authorisation), more job boards, calendar-aware interview prep.
+- **Next:** an approval PIN and idle-lock unlock for the Console, Career path / Profile audit / Network / News
+  screens in the Console (today they're Claude- and terminal-only), packaging as a one-click Claude Desktop
+  extension, and pulling full job descriptions from the Gulf boards (Adzuna covers none of the Gulf or Egypt).
+- **Later:** an optional phone approval mode, official *Share on LinkedIn* posting for approved posts (OAuth,
+  `w_member_social`; tokens last 60 days and need manual re-authorisation), more job boards, calendar-aware
+  interview prep.
 
 ## Development
 
@@ -143,6 +172,6 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 uv run --extra dev pytest        # or: pip install -e ".[dev]" && pytest
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, and a real stdio server end to end. GitHub Actions runs all 56 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, and the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge). GitHub Actions runs all 111 tests on Python 3.11 and 3.12 for every push and pull request.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
