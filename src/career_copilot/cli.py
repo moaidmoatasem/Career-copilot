@@ -13,6 +13,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+from . import gmail
 from .config import home_dir, profile_file, template_text
 from .service import Copilot, CopilotError
 
@@ -224,6 +225,50 @@ def cmd_claude_config(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gmail_auth(_: argparse.Namespace) -> int:
+    home = home_dir()
+    home.mkdir(parents=True, exist_ok=True)
+    print(f"Connecting Gmail with the read-only scope:\n  {gmail.SCOPE}\n")
+    print("Only mail from these senders is ever read:")
+    for domain in gmail.ALERT_SENDERS:
+        print(f"  - {domain}")
+    print("\nA browser window will open for Google's consent screen.")
+    try:
+        token = gmail.authorize(home)
+    except gmail.GmailError as exc:
+        print(warn(str(exc)), file=sys.stderr)
+        return 1
+    print(good(f"\nGmail connected. Token stored at {token} (readable only by you)."))
+    print("Now run: career-copilot sync")
+    return 0
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    copilot = Copilot()
+    try:
+        result = copilot.sync_gmail(args.days, args.max_messages)
+    finally:
+        copilot.store.close()
+    print(f"Read {result['messages_read']} message(s); {result['already_synced']} already synced.")
+    jobs = result["jobs_added"]
+    if jobs:
+        print(good(f"\n{len(jobs)} new job(s):"))
+        for job in jobs:
+            tier = job.get("tier") or "unscored"
+            print(f"  [{tier}] {job['title']} — {job.get('company') or 'unknown company'}")
+    else:
+        print("No new jobs.")
+    if result.get("inbox_items_added"):
+        print(f"{result['inbox_items_added']} new inbox item(s).")
+    if result.get("news_added"):
+        print(f"{result['news_added']} new news item(s).")
+    if result.get("flag_types"):
+        print(warn(f"\nFlags raised: {', '.join(result['flag_types'])} — review them before acting."))
+    for note in result.get("notes", []):
+        print(note)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="career-copilot", description="Review drafts and manage Career Copilot data.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -245,6 +290,11 @@ def main(argv: list[str] | None = None) -> int:
     purge.add_argument("what", choices=["inbox", "news", "jobs", "connections", "snapshot", "drafts", "courses", "all"])
     purge.add_argument("--yes", action="store_true")
     purge.set_defaults(func=cmd_purge)
+    sub.add_parser("gmail-auth", help="connect Gmail with a read-only scope (opens a browser)").set_defaults(func=cmd_gmail_auth)
+    sync = sub.add_parser("sync", help="read recent job-alert emails from Gmail")
+    sync.add_argument("--days", type=int, default=7, help="how far back to look (default 7)")
+    sync.add_argument("--max", type=int, default=50, dest="max_messages", help="message cap (default 50)")
+    sync.set_defaults(func=cmd_sync)
     sub.add_parser("claude-config", help="print the Claude Desktop config snippet").set_defaults(func=cmd_claude_config)
     args = parser.parse_args(argv)
     try:

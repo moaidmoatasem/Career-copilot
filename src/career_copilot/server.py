@@ -26,8 +26,8 @@ Rules you must follow:
 3. Drafts are AI-generated and may contain mistakes: say so when presenting them. Never invent achievements,
    metrics, dates, employers or skills. If a draft contains numbers (see checks.claims_to_verify), ask the user
    to confirm they are real and traceable.
-4. Use compliant sources only: LinkedIn notification emails from the user's own mailbox (e.g. via their Gmail
-   connector, passed to ingest_email), LinkedIn's official data export (import_linkedin_export), and job
+4. Use compliant sources only: the user's own mailbox (sync_gmail when Gmail is connected, otherwise their Gmail
+   connector passed to ingest_email), LinkedIn's official data export (import_linkedin_export), and job
    descriptions the user pastes. Never scrape LinkedIn, and never ask for the user's LinkedIn password or cookies.
 5. Tiers: matched = apply now, promising = worth tailoring for, close = reachable after closing specific skill gaps.
    Explain scores using the reasons provided; don't overstate fit.
@@ -101,6 +101,25 @@ def ingest_email(sender: str, subject: str, body: str, received_at: str | None =
     Pass the From header as `sender`, the Date header as `received_at`, and the plain-text (or HTML) body.
     Jobs are scored and tiered automatically. Duplicates are merged."""
     return service().ingest_email(sender, subject, body, received_at)
+
+
+@mcp.tool(annotations=FETCH)
+@guarded
+def sync_gmail(since_days: int = 7, max_messages: int = 50) -> dict:
+    """Read recent job-alert and notification emails straight from the user's Gmail (read-only scope)
+    and ingest them, so message bodies never pass through this conversation. Prefer this over
+    ingest_email when Gmail is connected. Only mail from LinkedIn, Bayt, GulfTalent, NaukriGulf and
+    Wuzzuf is ever read: you cannot widen it to other senders or search terms. Returns counts and the
+    jobs added, not message text. If it reports Gmail is not connected, tell the user to run
+    `career-copilot gmail-auth` in a terminal."""
+    return service().sync_gmail(since_days, max_messages)
+
+
+@mcp.tool(annotations=READ)
+@guarded
+def get_gmail_status() -> dict:
+    """Whether Gmail is connected, when it was last synced, and which senders are in scope."""
+    return service().gmail_status()
 
 
 @mcp.tool(annotations=WRITE)

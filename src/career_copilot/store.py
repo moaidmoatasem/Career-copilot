@@ -137,6 +137,13 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Gmail message ids already synced, so a repeated sync is cheap and idempotent.
+-- Ids only: no senders, subjects or bodies are kept here.
+CREATE TABLE IF NOT EXISTS synced_messages (
+    message_id TEXT PRIMARY KEY,
+    synced_at TEXT NOT NULL
+);
 """
 
 

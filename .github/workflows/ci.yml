@@ -23,4 +23,5 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Run tests
-        run: uv run --python ${{ matrix.python-version }} --extra dev pytest -q
+        # --extra gmail so the optional Gmail paths are covered rather than skipped.
+        run: uv run --python ${{ matrix.python-version }} --extra dev --extra gmail pytest -q

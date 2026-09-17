@@ -10,6 +10,12 @@ dependencies = ["mcp>=2.2,<3"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Read-only Gmail sync. Optional: everything else works without these.
+gmail = [
+  "google-api-python-client>=2.120",
+  "google-auth-oauthlib>=1.2",
+  "google-auth-httplib2>=0.2",
+]
 
 [project.scripts]
 career-copilot = "career_copilot.cli:main"

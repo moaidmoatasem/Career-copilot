@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Read-only Gmail sync.** `career-copilot gmail-auth` connects Gmail with the
+  `gmail.readonly` scope, and `career-copilot sync` (or the `sync_gmail` tool) reads recent
+  job-alert mail straight into the local database, so message bodies no longer pass through the
+  conversation. `get_gmail_status` reports whether it's connected and when it last ran.
+- Two limits the model cannot change: the OAuth scope is read-only, and the Gmail query is built
+  from a fixed sender allowlist (`linkedin.com`, `bayt.com`, `gulftalent.com`, `naukrigulf.com`,
+  `wuzzuf.net`), with senders re-checked locally after fetch. Callers pass only a time window and
+  a message cap, so an instruction injected into an email cannot widen the sync into the rest of
+  the mailbox.
+- Authorisation happens only in the CLI, where a person is present; the server can refresh an
+  existing token but never mint one.
+- `synced_messages` table stores Gmail message ids so repeat syncs are idempotent. Ids only — no
+  senders, subjects or bodies.
+- Google's client libraries are an optional extra (`uv sync --extra gmail`), imported lazily, so
+  the rest of the copilot runs without them.
+
+### Changed
+
+- `ingest_email` and `sync_gmail` now share one storage path (`_store_parsed_email`), so both
+  routes tier jobs, flag scams and dedupe identically.
+- CI also installs the `gmail` extra, so those paths are tested rather than skipped.
+- `.gitignore` covers `gmail-credentials.json`, `gmail-token.json` and `.env`.
+- README documents the Windows and macOS locations of `claude_desktop_config.json`.
+
 ## [0.1.0] - 2026-09-17
 
 First release. A local MCP server for Claude Desktop that runs a LinkedIn-centred job search
