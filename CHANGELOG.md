@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-17
 
 ### Added
 
@@ -92,4 +92,5 @@ without LinkedIn credentials, scraping, or any automated sending.
   export handling, learning plans, news, the MCP tool surface over the protocol, and a real
   stdio server end to end.
 
+[0.2.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.2.0
 [0.1.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.1.0
