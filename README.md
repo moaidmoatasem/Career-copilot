@@ -37,11 +37,26 @@ cd Career-copilot
 uv run career-copilot init            # creates ~/.career-copilot/{profile.toml, imports/, copilot.db}
 ```
 
+### Installing into Claude Desktop
+
+**One click.** Build the bundle and double-click it:
+
+```bash
+./scripts/build-mcpb.sh               # needs Node, only to run the packer
+```
+
+Then in Claude Desktop: **Settings → Extensions → Advanced settings → Install Extension…** and pick
+`career-copilot.mcpb`. It asks where to keep your data and wires the rest up itself. The bundle declares
+`server.type: "uv"`, so Claude Desktop uses uv and this project's `pyproject.toml` to resolve Python and
+dependencies at install time — nothing is vendored into it, and no Python is bundled.
+
+**Or by hand,** if you prefer to see the wiring:
+
 `init` writes a starter `~/.career-copilot/profile.toml`. Open it and fill in your name, target
 titles and locations, and the skills you can defend in an interview — scoring is only as good as
 that file. It stays on your machine and is never committed.
 
-`init` prints a config block. In Claude Desktop open **Settings → Developer → Edit Config**, add it to `claude_desktop_config.json`, and fully quit and reopen Claude. The file lives at `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
+`init` prints a config block. Open **Settings → Developer → Edit Config**, add it to `claude_desktop_config.json`, and fully quit and reopen Claude. The file lives at `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
 
 ```json
 {
