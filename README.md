@@ -108,6 +108,25 @@ What it will and won't do:
   is reported so you can paste instead. Navigation and footers would otherwise end up scored as
   skills.
 
+## Checking the install
+
+```bash
+uv run career-copilot doctor            # or --offline to skip network checks
+```
+
+One command that says whether this install actually works: data-folder and database permissions,
+database integrity and the append-only audit triggers, whether `profile.toml` parses and still holds
+template placeholders, whether the Gmail token is present with the read-only scope and still refreshes,
+whether each job board's `robots.txt` allows reading job pages, whether your feeds are reachable, and
+whether Claude Desktop has the server registered at a path that still exists.
+
+It exits `1` if anything failed, so it works in a script. `--json` gives machine-readable output.
+Nothing is created, repaired or sent — it only reads.
+
+A board reported under **reachability** could not be contacted at all, which is a network or proxy
+problem; a board reported under **robots.txt** answered and said no. Those need different fixes, so
+they are reported differently.
+
 ## Daily workflow
 
 1. **Triage** (Claude): runs `sync_gmail` (or passes emails to `ingest_email`), lists new jobs by tier and messages that need you, and drafts replies.
