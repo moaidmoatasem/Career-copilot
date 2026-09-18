@@ -14,6 +14,7 @@ LinkedIn offers no official API that lets a personal app read your inbox, feed o
 | Messages & invitations | LinkedIn notification emails, and conversations in your LinkedIn data export |
 | Profile, skills, connections | LinkedIn's official "Get a copy of your data" export |
 | Industry news | RSS/Atom feeds you choose, and LinkedIn digest emails |
+| Job descriptions | The `JobPosting` structured data Bayt, GulfTalent, NaukriGulf and Wuzzuf publish for search engines (robots.txt honoured) — and, for LinkedIn jobs, whatever you paste |
 
 ## What it covers
 
@@ -82,6 +83,31 @@ Two limits are built into the sync and are not configurable by the model:
 Without Gmail connected, the copilot still works the old way: in a chat with your Gmail connector
 enabled, Claude passes email text to `ingest_email`.
 
+## Filling in job descriptions
+
+A job alert gives you a title and a link. The description is what the skills half of the score is
+computed from, so a job without one is capped at *promising* until you supply it.
+
+```bash
+uv run career-copilot fetch-descriptions          # tries the 5 newest jobs that lack one
+uv run career-copilot fetch-descriptions --limit 20
+```
+
+Claude can do the same with `fetch_job_description` and `fetch_missing_descriptions`.
+
+What it will and won't do:
+
+- **Never LinkedIn.** LinkedIn URLs are refused by name, not merely left off a list. Those
+  descriptions come from you pasting them — that is the trade for never scraping LinkedIn.
+- **Four boards only** — Bayt, GulfTalent, NaukriGulf, Wuzzuf — https only. The model can't pass a
+  URL: it names a job already in your database, and the URL comes from there.
+- **robots.txt is checked first**, per host, with the same user-agent that does the fetching. If a
+  board disallows the path, nothing is requested and the job is left alone.
+- **Structured data only.** It reads the page's `JobPosting` JSON-LD — the data these boards
+  publish so search engines can read it — and never harvests prose from the page. A page without it
+  is reported so you can paste instead. Navigation and footers would otherwise end up scored as
+  skills.
+
 ## Daily workflow
 
 1. **Triage** (Claude): runs `sync_gmail` (or passes emails to `ingest_email`), lists new jobs by tier and messages that need you, and drafts replies.
@@ -147,12 +173,12 @@ For the profile audit, referrals and replies owed, request your export in Linked
 
 Read-only: `get_status`, `get_gmail_status`, `list_jobs`, `get_job`, `find_referrals`, `list_inbox`, `get_skill_gaps`, `build_learning_plan`, `list_courses`, `audit_profile`, `get_news_digest`, `list_drafts`, `get_approved_actions`, `get_audit_log`.
 Local writes: `ingest_email`, `import_linkedin_export`, `add_job`, `update_job`, `update_inbox_item`, `add_course`, `update_course`, `draft_message_reply`, `draft_post`, `draft_comment`, `draft_application`, `propose_profile_edit`, `draft_outreach`, `revise_draft`, `withdraw_draft`, `mark_executed`.
-Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only scope, allowlisted senders only).
+Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only scope, allowlisted senders only), `fetch_job_description` / `fetch_missing_descriptions` (allowlisted job boards only, never LinkedIn).
 
 ## Limitations
 
 - Email layouts change; parsing is heuristic. Anything unreadable is reported, and `add_job` always works.
-- Job alerts carry titles, not descriptions. Paste descriptions for the jobs you care about; that's what unlocks skill scoring.
+- Job alerts carry titles, not descriptions. `career-copilot fetch-descriptions` fills them in for Bayt, GulfTalent, NaukriGulf and Wuzzuf jobs; for LinkedIn jobs you paste them yourself, which is the trade for not scraping.
 - The skill taxonomy is tuned for QA, automation and AI-quality roles. Extend it under `[skills.aliases]`.
 - The copilot sees what your emails and exports contain, not LinkedIn's live feed.
 - LinkedIn character limits are built in as of 2026 and may change.
@@ -161,7 +187,7 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 
 - **Next:** an approval PIN and idle-lock unlock for the Console, Career path / Profile audit / Network / News
   screens in the Console (today they're Claude- and terminal-only), packaging as a one-click Claude Desktop
-  extension, and pulling full job descriptions from the Gulf boards (Adzuna covers none of the Gulf or Egypt).
+  extension, and widening description coverage beyond the four Gulf boards.
 - **Later:** an optional phone approval mode, official *Share on LinkedIn* posting for approved posts (OAuth,
   `w_member_social`; tokens last 60 days and need manual re-authorisation), more job boards, calendar-aware
   interview prep.

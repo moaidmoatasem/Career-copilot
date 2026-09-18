@@ -27,8 +27,10 @@ Rules you must follow:
    metrics, dates, employers or skills. If a draft contains numbers (see checks.claims_to_verify), ask the user
    to confirm they are real and traceable.
 4. Use compliant sources only: the user's own mailbox (sync_gmail when Gmail is connected, otherwise their Gmail
-   connector passed to ingest_email), LinkedIn's official data export (import_linkedin_export), and job
-   descriptions the user pastes. Never scrape LinkedIn, and never ask for the user's LinkedIn password or cookies.
+   connector passed to ingest_email), LinkedIn's official data export (import_linkedin_export), job
+   descriptions the user pastes, and fetch_job_description for jobs on Bayt/GulfTalent/NaukriGulf/Wuzzuf.
+   Never scrape LinkedIn, and never ask for the user's LinkedIn password or cookies. A LinkedIn job's
+   description can only come from the user pasting it.
 5. Tiers: matched = apply now, promising = worth tailoring for, close = reachable after closing specific skill gaps.
    Explain scores using the reasons provided; don't overstate fit.
 """
@@ -147,6 +149,26 @@ def update_job(job_id: int, description: str | None = None, status: JobStatus | 
                notes: str | None = None, company: str | None = None, location: str | None = None) -> dict:
     """Update a job: paste its full description (re-scores it), move it through the pipeline, or add notes."""
     return service().update_job(job_id, description, status, notes, company, location)
+
+
+@mcp.tool(annotations=FETCH)
+@guarded
+def fetch_job_description(job_id: int) -> dict:
+    """Fetch a stored job's full description from its job-board page and re-score it. Use this when a
+    job has no description (jobs without one are capped at the promising tier). Works only for
+    Bayt, GulfTalent, NaukriGulf and Wuzzuf, reads only the page's published JobPosting structured
+    data, and honours the board's robots.txt. It will refuse LinkedIn URLs: for those, ask the user
+    to open the job and paste the description into update_job."""
+    return service().fetch_job_description(job_id)
+
+
+@mcp.tool(annotations=FETCH)
+@guarded
+def fetch_missing_descriptions(limit: int = 5) -> dict:
+    """Fill in descriptions for stored jobs that lack one, newest first, and re-score them. Reports
+    which jobs need the user to paste a description by hand because they aren't on a fetchable
+    board (LinkedIn jobs always are)."""
+    return service().fetch_missing_descriptions(limit)
 
 
 @mcp.tool(annotations=READ)

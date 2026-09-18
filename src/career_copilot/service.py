@@ -7,7 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import drafts, emails, export, gmail, learning, news, profile_audit
+from . import boards, drafts, emails, export, gmail, learning, news, profile_audit
 from .config import LIMITS, ConfigError, Profile, home_dir, load_profile, profile_file
 from .safety import clean_text, prepare_untrusted
 from .scoring import score_job
@@ -36,6 +36,7 @@ def _iso_days_ago(days: int) -> str:
 class Copilot:
     fetch_feed = staticmethod(news.fetch_feed)  # replaced in tests
     fetch_gmail = staticmethod(gmail.fetch_messages)  # replaced in tests
+    fetch_job_page = staticmethod(boards.fetch_job_details)  # replaced in tests
 
     def __init__(self, home: Path | None = None) -> None:
         self.home = (home or home_dir()).expanduser()
@@ -557,6 +558,87 @@ class Copilot:
         if row["tier"] != view["tier"]:
             view["tier_change"] = f"{row['tier']} → {view['tier']}"
         return view
+
+    def fetch_job_description(self, job_id: int) -> dict:
+        """Fetch a stored job's description from its board page and re-score it.
+
+        The URL comes from the database, never from the caller, and `boards` refuses anything
+        outside its allowlist — LinkedIn by name.
+        """
+        row = self._job(job_id)
+        url = (row["url"] or "").strip()
+        if not url:
+            raise CopilotError(f"job {job_id} has no URL; paste its description with update_job")
+        if row["description"]:
+            return {"job": self.get_job(job_id), "fetched": False,
+                    "note": "this job already has a description; nothing fetched"}
+        try:
+            details = self.fetch_job_page(url)
+        except boards.BoardError as exc:
+            raise CopilotError(str(exc)) from exc
+        except OSError as exc:
+            raise CopilotError(f"could not fetch {url}: {str(exc)[:150]}") from exc
+
+        before = row["tier"]
+        # Only fill blanks: what the user or an alert email already recorded wins.
+        company = details.get("company") if not row["company"] else ""
+        location = details.get("location") if not row["location"] else ""
+        view = self.update_job(
+            job_id,
+            description=details["description"],
+            company=company or None,
+            location=location or None,
+        )
+        self.store.audit("assistant", "job.description.fetch", f"job:{job_id}",
+                         {"host": boards.host_of(url), "chars": len(details["description"]),
+                          "tier": f"{before} -> {view['tier']}"})
+        result = {"job": view, "fetched": True, "source": boards.host_of(url),
+                  "description_chars": len(details["description"])}
+        if before != view["tier"]:
+            result["tier_change"] = f"{before} → {view['tier']}"
+        if view.get("flags"):
+            result["_notice"] = UNTRUSTED_NOTICE
+        return result
+
+    def fetch_missing_descriptions(self, limit: int = 5) -> dict:
+        """Fill in descriptions for stored jobs that lack one, newest first.
+
+        Only jobs on fetchable boards are attempted; LinkedIn jobs are listed as needing a paste.
+        """
+        if not 1 <= limit <= 25:
+            raise CopilotError("limit must be between 1 and 25")
+        rows = self.store.query(
+            "SELECT id, title, url FROM jobs WHERE description = '' AND url != '' "
+            "AND status NOT IN ('rejected','archived') ORDER BY id DESC"
+        )
+        fetched, failed, needs_paste = [], [], []
+        for row in rows:
+            if len(fetched) + len(failed) >= limit:
+                break
+            try:
+                boards.check_url(row["url"])
+            except boards.BoardError:
+                needs_paste.append({"id": row["id"], "title": row["title"], "url": row["url"]})
+                continue
+            try:
+                outcome = self.fetch_job_description(row["id"])
+            except CopilotError as exc:
+                failed.append({"id": row["id"], "title": row["title"], "error": str(exc)[:200]})
+                continue
+            entry = {"id": row["id"], "title": outcome["job"]["title"], "tier": outcome["job"]["tier"]}
+            if outcome.get("tier_change"):
+                entry["tier_change"] = outcome["tier_change"]
+            fetched.append(entry)
+        result: dict = {"fetched": fetched, "failed": failed,
+                        "needs_paste": needs_paste[:20], "jobs_without_description": len(rows)}
+        if not rows:
+            result["notes"] = ["Every stored job with a URL already has a description."]
+        elif not fetched and needs_paste and not failed:
+            result["notes"] = [
+                "None of these are on a board this can fetch from. Open each one and paste its "
+                "description with update_job — that is what unlocks skill scoring."
+            ]
+        return result
 
     def list_jobs(self, tier: str | None = None, status: str | None = None, limit: int = 20) -> dict:
         self.profile  # reload profile.toml (and rescore) if it changed

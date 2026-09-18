@@ -13,7 +13,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from . import gmail
+from . import boards, gmail
 from .config import home_dir, profile_file, template_text
 from .service import Copilot, CopilotError
 
@@ -275,6 +275,31 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fetch_descriptions(args: argparse.Namespace) -> int:
+    copilot = Copilot()
+    try:
+        result = copilot.fetch_missing_descriptions(args.limit)
+    finally:
+        copilot.store.close()
+    print(f"{result['jobs_without_description']} stored job(s) have no description.")
+    print(f"Fetchable boards: {', '.join(boards.FETCHABLE_DOMAINS)}\n")
+    for job in result["fetched"]:
+        change = f"  ({job['tier_change']})" if job.get("tier_change") else ""
+        print(good(f"  fetched  [{job['tier']}] {job['title']}") + change)
+    for job in result["failed"]:
+        print(warn(f"  failed   {job['title']}: {job['error']}"))
+    if result["needs_paste"]:
+        print(f"\n{len(result['needs_paste'])} job(s) need you to paste the description by hand:")
+        for job in result["needs_paste"]:
+            print(f"  #{job['id']} {job['title']}\n     {job['url']}")
+        print("\nOpen each one, copy the description, then ask Claude to update_job — that is what")
+        print("unlocks skill scoring. LinkedIn descriptions can only come from you.")
+    else:
+        for note in result.get("notes", []):
+            print(note)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="career-copilot", description="Review drafts and manage Career Copilot data.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -301,6 +326,9 @@ def main(argv: list[str] | None = None) -> int:
     sync.add_argument("--days", type=int, default=7, help="how far back to look (default 7)")
     sync.add_argument("--max", type=int, default=50, dest="max_messages", help="message cap (default 50)")
     sync.set_defaults(func=cmd_sync)
+    descriptions = sub.add_parser("fetch-descriptions", help="fetch missing job descriptions from the job boards")
+    descriptions.add_argument("--limit", type=int, default=5, help="how many jobs to try (default 5)")
+    descriptions.set_defaults(func=cmd_fetch_descriptions)
     sub.add_parser("claude-config", help="print the Claude Desktop config snippet").set_defaults(func=cmd_claude_config)
     console = sub.add_parser("console", help="open the local approval web app (localhost only)")
     console.add_argument("--no-browser", action="store_true", help="print the link instead of opening it")

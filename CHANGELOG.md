@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Job descriptions from the Gulf boards.** `career-copilot fetch-descriptions`, and the
+  `fetch_job_description` / `fetch_missing_descriptions` tools, fill in the descriptions that job
+  alerts omit — the input the skills half of the score depends on, and the reason jobs without one
+  are capped at *promising*. Fetched descriptions go through the same `update_job` path as pasted
+  ones, so they are sanitised, flagged and re-scored identically.
+- Four limits keep this inside what the project is willing to do: LinkedIn is refused by name with
+  an explanation (its descriptions stay paste-only); only Bayt, GulfTalent, NaukriGulf and Wuzzuf
+  are fetchable, https only; `robots.txt` is honoured per host with the fetching user-agent; and
+  only the page's published `JobPosting` JSON-LD is read, never prose harvested from the page.
+- The model cannot supply a URL to fetch — it names a stored job, and the URL comes from the
+  database. Redirects are re-checked against the allowlist, and an unreadable `robots.txt` counts
+  as disallowed.
+- Fetching only fills blanks: a company or location already recorded by you or an alert email is
+  never overwritten.
+
+## [0.2.0] - 2026-09-17
+
+### Added
+
 - **Copilot Console.** `career-copilot console` opens a localhost-only web app — Today, Review,
   Jobs, Inbox, Data & privacy — with a one-time launch link. It talks only to the local database:
   no route reaches Claude or LinkedIn, and (like the MCP server) it has no "send" capability
@@ -92,4 +111,5 @@ without LinkedIn credentials, scraping, or any automated sending.
   export handling, learning plans, news, the MCP tool surface over the protocol, and a real
   stdio server end to end.
 
+[0.2.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.2.0
 [0.1.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.1.0
