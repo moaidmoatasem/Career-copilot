@@ -13,7 +13,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from . import boards, gmail
+from . import boards, doctor as doctor_mod, gmail
 from .config import home_dir, profile_file, template_text
 from .service import Copilot, CopilotError
 
@@ -300,6 +300,33 @@ def cmd_fetch_descriptions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    checks = doctor_mod.run_checks(home_dir(), network=not args.offline)
+    if args.json:
+        print(json.dumps(
+            {"checks": [{"status": c.status, "title": c.title, "detail": c.detail} for c in checks],
+             "summary": doctor_mod.summarise(checks)},
+            indent=2, ensure_ascii=False,
+        ))
+        return 1 if any(c.failed for c in checks) else 0
+
+    marks = {doctor_mod.OK: good("  ok  "), doctor_mod.WARN: warn(" warn "), doctor_mod.FAIL: warn(" FAIL ")}
+    print(bold("Career Copilot health check"))
+    if args.offline:
+        print("Network checks skipped (--offline).")
+    print()
+    for check in checks:
+        print(f"[{marks[check.status]}] {check.title}: {check.detail}")
+    counts = doctor_mod.summarise(checks)
+    print(f"\n{counts[doctor_mod.OK]} ok, {counts[doctor_mod.WARN]} warning(s), {counts[doctor_mod.FAIL]} failure(s)")
+    if counts[doctor_mod.FAIL]:
+        print(warn("Fix the failures above; the copilot will not work correctly until you do."))
+        return 1
+    if counts[doctor_mod.WARN]:
+        print("Warnings are safe to ignore if they describe features you do not use.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="career-copilot", description="Review drafts and manage Career Copilot data.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -329,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
     descriptions = sub.add_parser("fetch-descriptions", help="fetch missing job descriptions from the job boards")
     descriptions.add_argument("--limit", type=int, default=5, help="how many jobs to try (default 5)")
     descriptions.set_defaults(func=cmd_fetch_descriptions)
+    doc = sub.add_parser("doctor", help="check that this install is healthy")
+    doc.add_argument("--offline", action="store_true", help="skip checks that use the network")
+    doc.add_argument("--json", action="store_true", help="machine-readable output")
+    doc.set_defaults(func=cmd_doctor)
     sub.add_parser("claude-config", help="print the Claude Desktop config snippet").set_defaults(func=cmd_claude_config)
     console = sub.add_parser("console", help="open the local approval web app (localhost only)")
     console.add_argument("--no-browser", action="store_true", help="print the link instead of opening it")
