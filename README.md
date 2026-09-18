@@ -26,6 +26,7 @@ LinkedIn offers no official API that lets a personal app read your inbox, feed o
 | Full profile | Audits headline, About, experience and skills against LinkedIn limits and the skills your target jobs ask for; proposes edits with a diff. |
 | News & posts | Ranks news by your interests and skill gaps; drafts posts and comments for approval. |
 | Referrals | Finds first-degree connections at a job's company (from your export) and drafts the ask. |
+| UK sponsor licences | For UK jobs, checks the employer against the Home Office Register of Licensed Sponsors you imported, ranked rather than guessed. Company-level only — it never claims a role is sponsored. |
 
 ## Quick start (about 5 minutes)
 
@@ -194,6 +195,37 @@ For the profile audit, referrals and replies owed, request your export in Linked
 | Silent history rewriting | The audit log is append-only (enforced by database triggers). |
 | Local disk exposure | Data folder `0700`, database `0600`. Use full-disk encryption on your laptop. |
 
+## UK sponsor licences
+
+If you're targeting UK roles, import the Home Office **Register of Licensed Sponsors** once and the
+copilot will tell you, for each UK job, whether the employer holds a licence:
+
+```bash
+# Download the "Worker and Temporary Worker" CSV from gov.uk, then:
+uv run career-copilot import-sponsors Worker_and_Temporary_Worker.csv
+```
+
+Put the CSV in `~/.career-copilot/imports/` first. Nothing downloads it for you — gov.uk republishes
+it roughly weekly, so you control when it refreshes, and matches are marked provisional once your
+copy is over 35 days old.
+
+What the check does and doesn't say:
+
+- It matches on **ranked** name similarity, not a substring hit. Where nothing is decisively ahead
+  it shows you the candidates and asks, rather than picking. A query of "Wise" is genuinely
+  ambiguous in the register and is treated that way.
+- Licence routes that can't sponsor skilled work (Creative, Religious, Sportsperson, Charity,
+  Ministers of Religion, Seasonal) are excluded before names are scored.
+- **A licence is company-level.** It does not mean that employer will sponsor *this* role, and says
+  nothing about whether you meet the salary or skill thresholds. The copilot never says "sponsored".
+- An empty register or a job with no company name is reported as *unknown*, never as "not a sponsor".
+- Non-UK jobs are untouched: no sponsorship information is computed or shown for them at all.
+
+Register data: Contains public sector information licensed under the
+[Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+Register of Licensed Sponsors © Crown copyright, UK Home Office. It stays in your local database and
+`career-copilot purge sponsors` removes it.
+
 ## Data, privacy, AI transparency
 
 - Stored locally only: jobs, inbox previews (not full messages), news, drafts, courses, your profile snapshot, and connections **without** email addresses. Gmail sync stores message *ids* to avoid re-reading, never message bodies.
@@ -205,8 +237,8 @@ For the profile audit, referrals and replies owed, request your export in Linked
 
 ## Tools
 
-Read-only: `get_status`, `get_gmail_status`, `list_jobs`, `get_job`, `find_referrals`, `list_inbox`, `get_skill_gaps`, `build_learning_plan`, `list_courses`, `audit_profile`, `get_news_digest`, `list_drafts`, `get_approved_actions`, `get_audit_log`.
-Local writes: `ingest_email`, `import_linkedin_export`, `add_job`, `update_job`, `update_inbox_item`, `add_course`, `update_course`, `draft_message_reply`, `draft_post`, `draft_comment`, `draft_application`, `propose_profile_edit`, `draft_outreach`, `revise_draft`, `withdraw_draft`, `mark_executed`.
+Read-only: `get_status`, `get_gmail_status`, `list_jobs`, `get_job`, `find_referrals`, `check_sponsor_licence`, `list_inbox`, `get_skill_gaps`, `build_learning_plan`, `list_courses`, `audit_profile`, `get_news_digest`, `list_drafts`, `get_approved_actions`, `get_audit_log`.
+Local writes: `ingest_email`, `import_linkedin_export`, `import_sponsor_register`, `add_job`, `update_job`, `update_inbox_item`, `add_course`, `update_course`, `draft_message_reply`, `draft_post`, `draft_comment`, `draft_application`, `propose_profile_edit`, `draft_outreach`, `revise_draft`, `withdraw_draft`, `mark_executed`.
 Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only scope, allowlisted senders only), `fetch_job_description` / `fetch_missing_descriptions` (allowlisted job boards only, never LinkedIn).
 
 ## Limitations
@@ -232,6 +264,6 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 uv run --extra dev pytest        # or: pip install -e ".[dev]" && pytest
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, and the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge). GitHub Actions runs all 111 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge), and sponsor-register matching against the real collisions in it. GitHub Actions runs all 198 tests on Python 3.11 and 3.12 for every push and pull request.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).

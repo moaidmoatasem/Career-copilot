@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **UK sponsor-licence check.** For UK-located jobs, `check_sponsor_licence` and the Console's job
+  page say whether the employer appears on the Home Office Register of Licensed Sponsors. You
+  import the register yourself: download the CSV from gov.uk, put it in the imports folder, and run
+  `career-copilot import-sponsors <file>` (or the `import_sponsor_register` tool). Nothing
+  downloads it for you, and the import date travels with every match.
+- Name matching is ranked, not a substring hit: exact, legal-suffix-equivalent, leading-prefix and
+  token-overlap tiers, with a candidate list when nothing is decisively ahead. It refuses to pick
+  rather than pick wrongly — "Wise" is offered as a choice, never resolved to "Aaron Wise Limited".
+  Licence routes that cannot sponsor skilled work (Creative, Religious, Sportsperson, Charity,
+  Ministers of Religion, Seasonal) are excluded before names are scored, so the register's real
+  `Wise | Religious Worker | High Wycombe` row can never be reported as the fintech.
+- What the check will not say: never "sponsored", never that an employer will sponsor a given role,
+  and never "not a sponsor" when the register simply hasn't been imported or the job has no company
+  name — those are reported as unknown. Server instruction 6 holds the model to the same line.
+  Matches are marked provisional once the import is over 35 days old.
+- `geo.py` recognises the UK, so UK jobs score against a UK target location instead of falling
+  through as "outside your target locations".
+- `career-copilot purge sponsors` clears the register, and the Data & privacy page shows what was
+  imported, when, and its Open Government Licence attribution.
 - **Job descriptions from the Gulf boards.** `career-copilot fetch-descriptions`, and the
   `fetch_job_description` / `fetch_missing_descriptions` tools, fill in the descriptions that job
   alerts omit — the input the skills half of the score depends on, and the reason jobs without one

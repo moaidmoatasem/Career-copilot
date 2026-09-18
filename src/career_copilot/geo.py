@@ -1,4 +1,4 @@
-"""Location normalisation for GCC and Egypt job markets (extend as needed)."""
+"""Location normalisation for the GCC, Egypt and UK job markets (extend as needed)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "oman": ("muscat", "sohar"),
     "egypt": ("cairo", "new cairo", "giza", "alexandria", "6th of october", "sheikh zayed",
               "new administrative capital", "smart village"),
+    "united kingdom": ("uk", "u.k", "england", "scotland", "wales", "northern ireland", "britain",
+                       "great britain", "london", "manchester", "birmingham", "leeds", "glasgow",
+                       "edinburgh", "bristol", "cambridge", "oxford", "reading", "belfast",
+                       "cardiff", "liverpool", "sheffield", "newcastle", "nottingham"),
 }
 
 REMOTE = re.compile(r"\b(remote|work from home|wfh|anywhere)\b", re.I)

@@ -133,6 +133,20 @@ BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 
+-- UK Register of Licensed Sponsors, imported by the user from gov.uk. Public data about
+-- organisations, nothing personal. `name_core` is computed in Python at import time, never in
+-- SQL, so the matcher and this index can never disagree about what a name reduces to.
+CREATE TABLE IF NOT EXISTS sponsors (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_core TEXT NOT NULL DEFAULT '',
+    route TEXT NOT NULL DEFAULT '',
+    type_rating TEXT NOT NULL DEFAULT '',
+    town TEXT NOT NULL DEFAULT '',
+    county TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_sponsors_name_core ON sponsors(name_core);
+
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
