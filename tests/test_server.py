@@ -20,11 +20,15 @@ def srv(home):
 async def test_tool_surface_has_no_approval_path(srv):
     async with Client(srv) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}
-    assert {"ingest_email", "list_jobs", "draft_message_reply", "mark_executed", "build_learning_plan"} <= set(tools)
+    assert {"ingest_email", "list_jobs", "draft_message_reply", "mark_executed", "build_learning_plan",
+            "check_sponsor_licence", "import_sponsor_register"} <= set(tools)
     assert not [name for name in tools if name.startswith(("approve", "reject", "send", "post_", "apply"))]
     assert tools["list_jobs"].annotations.read_only_hint is True
     assert tools["draft_post"].annotations.destructive_hint is False
     assert tools["refresh_news"].annotations.open_world_hint is True
+    # The register check only reads the local database: no network, nothing to change.
+    assert tools["check_sponsor_licence"].annotations.read_only_hint is True
+    assert tools["check_sponsor_licence"].annotations.open_world_hint is False
 
 
 async def test_round_trip_and_errors_over_protocol(srv):

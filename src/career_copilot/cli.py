@@ -249,6 +249,21 @@ def cmd_gmail_auth(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_sponsors(args: argparse.Namespace) -> int:
+    copilot = Copilot()
+    try:
+        result = copilot.import_sponsor_register(args.file_name)
+    finally:
+        copilot.store.close()
+    print(good(f"Imported {result['rows']:,} register entries from {result['file']}."))
+    print(f"  {result['sponsoring_skilled_work']:,} hold a licence on a route that can sponsor skilled work.")
+    if result["skipped_without_name"]:
+        print(warn(f"  {result['skipped_without_name']} row(s) had no organisation name and were skipped."))
+    print(f"\n{result['licence']}")
+    print(warn(f"\n{result['note']}"))
+    return 0
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     copilot = Copilot()
     try:
@@ -317,8 +332,13 @@ def main(argv: list[str] | None = None) -> int:
     log = sub.add_parser("log", help="show the audit log")
     log.add_argument("-n", type=int, default=30)
     log.set_defaults(func=cmd_log)
+    sponsors_cmd = sub.add_parser("import-sponsors",
+                                  help="import the UK Register of Licensed Sponsors CSV from the imports folder")
+    sponsors_cmd.add_argument("file_name", help="file name of the CSV you downloaded from gov.uk")
+    sponsors_cmd.set_defaults(func=cmd_import_sponsors)
     purge = sub.add_parser("purge", help="delete stored data")
-    purge.add_argument("what", choices=["inbox", "news", "jobs", "connections", "snapshot", "drafts", "courses", "all"])
+    purge.add_argument("what", choices=["inbox", "news", "jobs", "connections", "snapshot", "drafts",
+                                        "courses", "sponsors", "all"])
     purge.add_argument("--yes", action="store_true")
     purge.set_defaults(func=cmd_purge)
     sub.add_parser("gmail-auth", help="connect Gmail with a read-only scope (opens a browser)").set_defaults(func=cmd_gmail_auth)

@@ -283,3 +283,62 @@ def test_purge_all_requires_typing_delete(logged_in, cp):
     assert "error=" in r.headers["location"]
     r = logged_in.post("/data/purge", data={"what": "all", "confirm": "DELETE"}, follow_redirects=False)
     assert r.status_code == 303
+
+
+# ---------------------------------------------------------------------------- sponsor register
+
+REGISTER_CSV = (
+    "Organisation Name,Town/City,County,Type & Rating,Route\n"
+    "Wise Payments Limited,London,,Worker (A rating),Skilled Worker\n"
+    "Wise,High Wycombe,Buckinghamshire,Temporary Worker (A rating),Religious Worker\n"
+)
+
+
+def _import_register(cp):
+    cp.imports_dir.mkdir(parents=True, exist_ok=True)
+    (cp.imports_dir / "register.csv").write_text(REGISTER_CSV, encoding="utf-8")
+    cp.import_sponsor_register("register.csv")
+
+
+def test_uk_job_shows_the_register_card(logged_in, cp):
+    _import_register(cp)
+    job = cp.add_job("Senior QA Engineer", "Wise Payments", "London, United Kingdom", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "UK sponsor register" in r.text
+    assert "Wise Payments Limited" in r.text
+    assert "company-level" in r.text
+
+
+def test_gulf_job_shows_no_register_card(logged_in, cp):
+    _import_register(cp)
+    job = cp.add_job("Senior QA Engineer", "Wise Payments", "Dubai, United Arab Emirates", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "UK sponsor register" not in r.text
+
+
+def test_console_never_claims_a_job_is_sponsored(logged_in, cp):
+    _import_register(cp)
+    job = cp.add_job("Senior QA Engineer", "Wise Payments", "London, United Kingdom", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "sponsored" not in r.text.lower()
+
+
+def test_ambiguous_match_is_offered_as_a_choice(logged_in, cp):
+    _import_register(cp)
+    job = cp.add_job("Senior QA Engineer", "Wise", "London, United Kingdom", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "confirm which is right" in r.text
+    assert "High Wycombe" not in r.text  # the religious-worker licence is never offered
+
+
+def test_data_page_explains_how_to_import_the_register(logged_in):
+    r = logged_in.get("/data")
+    assert "Not imported" in r.text
+    assert "import-sponsors" in r.text
+
+
+def test_data_page_shows_register_provenance_once_imported(logged_in, cp):
+    _import_register(cp)
+    r = logged_in.get("/data")
+    assert "Open Government Licence" in r.text
+    assert "register.csv" in r.text

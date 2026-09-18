@@ -7,6 +7,7 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -36,6 +37,15 @@ def to_utc_iso(value: str | None) -> str:
 
 def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    """Digest a file without holding it in memory — register CSVs run to tens of megabytes."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def short_hash(text: str, length: int = 16) -> str:

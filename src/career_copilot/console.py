@@ -43,7 +43,7 @@ from .service import ACTIVE_TIERS, ALL_TIERS, INBOX_STATUSES, JOB_STATUSES, Copi
 IDLE_TIMEOUT_SECONDS = 15 * 60
 LAUNCH_TOKEN_TTL_SECONDS = 10 * 60
 SESSION_COOKIE = "cc_session"
-PURGE_CHOICES = ("inbox", "news", "jobs", "connections", "snapshot", "drafts", "courses", "all")
+PURGE_CHOICES = ("inbox", "news", "jobs", "connections", "snapshot", "drafts", "courses", "sponsors", "all")
 REJECT_REASONS = ("wrong facts", "tone", "not needed", "other")
 
 NAV_ITEMS = [
@@ -617,6 +617,51 @@ def jobs_board(request: Request) -> HTMLResponse:
     return layout(request, title="Jobs", active="/jobs", body=body)
 
 
+def _sponsorship_card(sponsorship: dict | None) -> str:
+    """Render the register signal. Deliberately plain text and no progress bar: the score is a
+    name-similarity confidence, not a measure of fit, and must never be read as one."""
+    if not sponsorship:
+        return ""
+    status = sponsorship.get("status")
+    register = sponsorship.get("register", {})
+    provisional = ('<span class="chip">PROVISIONAL · register imported '
+                   f'{esc(_age(register.get("imported_at")))}</span>' if register.get("stale") else "")
+
+    if status == "no_register":
+        inner = ('<p>The sponsor register has not been imported yet, so this is <strong>unknown</strong> — '
+                 'not a "no". Import it from the Data &amp; privacy page.</p>')
+    elif status == "no_company":
+        inner = '<p>No usable company name was recorded for this job, so the register cannot be checked.</p>'
+    elif status == "no_match":
+        inner = (f'<p>No licensed sponsor matched <strong>{esc(sponsorship.get("searched_for", ""))}</strong>. '
+                 'The employer may be registered under a different legal name — check the register itself '
+                 'before concluding anything.</p>')
+    elif status == "needs_confirmation":
+        rows = "".join(
+            f'<li><strong>{esc(c["name"])}</strong> · {esc(c["town"] or "—")} · {esc(c["route"])} '
+            f'<span class="muted">({c["score"]:.2f} name match)</span></li>'
+            for c in sponsorship.get("candidates", [])
+        )
+        inner = (f'<p>Possible matches for <strong>{esc(sponsorship.get("searched_for", ""))}</strong> — '
+                 f'confirm which is right:</p><ul class="check-list">{rows}</ul>')
+    else:
+        match = sponsorship.get("match") or {}
+        inner = (f'<p><strong>{esc(match.get("name", ""))}</strong> appears on the register · '
+                 f'{esc(match.get("town") or "—")} · {esc(match.get("route", ""))} · '
+                 f'{esc(match.get("type_rating", ""))}</p>')
+
+    caveat = ('<p class="muted">Register entries are company-level. A licence does not mean this employer '
+              'will sponsor this role, and says nothing about whether you meet the salary or skill '
+              'thresholds.</p>')
+    return f"""
+<div class="card">
+  <h2>UK sponsor register</h2>
+  {provisional}
+  {inner}
+  {caveat}
+</div>"""
+
+
 def _bar(label: str, value: float | None) -> str:
     if value is None:
         return ""
@@ -662,6 +707,7 @@ def job_detail(request: Request) -> Response:
   <div class="bars">{bars}</div>
   <ul class="check-list">{reasons}</ul>
 </div>
+{_sponsorship_card(j.get("sponsorship"))}
 <div class="card">
   <h2>Skills</h2>
   <p class="muted">Matched</p>{matched or '<span class="muted">none yet</span>'}
@@ -771,6 +817,32 @@ async def inbox_update_status(request: Request) -> Response:
 
 # ---------------------------------------------------------------------------- Data & privacy
 
+def _register_card(register: dict) -> str:
+    if not register["imported"]:
+        return f"""
+<div class="card">
+  <h2>UK sponsor register</h2>
+  <p class="muted">Not imported. Without it, UK jobs show sponsorship as unknown — never as "not a sponsor".</p>
+  <ol>
+    <li>Download the "Worker and Temporary Worker" CSV from
+        <a href="{esc(register['source'])}" target="_blank" rel="noopener noreferrer">gov.uk</a></li>
+    <li>Put it in <code>{esc(register['imports_folder'])}</code></li>
+    <li>Run <code>career-copilot import-sponsors &lt;file name&gt;</code></li>
+  </ol>
+</div>"""
+    stale = ('<span class="chip">PROVISIONAL — gov.uk republishes this roughly weekly; re-import it</span>'
+             if register["stale"] else "")
+    return f"""
+<div class="card">
+  <h2>UK sponsor register</h2>
+  {stale}
+  <p>{register['rows']:,} entries from <code>{esc(register['file'])}</code>, imported
+     {esc(_age(register['imported_at']))}.</p>
+  <p class="muted">{esc(register['licence'])}
+     <a href="{esc(register['source'])}" target="_blank" rel="noopener noreferrer">Source</a></p>
+</div>"""
+
+
 def data_privacy(request: Request) -> HTMLResponse:
     cp: Copilot = request.app.state.cp
     status = cp.status()
@@ -805,6 +877,7 @@ def data_privacy(request: Request) -> HTMLResponse:
      Connections imported: {status['connections_imported']} ·
      Profile export imported: {'yes' if status['profile_snapshot_imported'] else 'no'}</p>
 </div>
+{_register_card(cp.sponsor_register_status())}
 <h2>Delete data</h2>
 <div class="grid">{purge_forms}</div>
 """

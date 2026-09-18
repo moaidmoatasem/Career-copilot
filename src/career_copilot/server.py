@@ -33,6 +33,12 @@ Rules you must follow:
    description can only come from the user pasting it.
 5. Tiers: matched = apply now, promising = worth tailoring for, close = reachable after closing specific skill gaps.
    Explain scores using the reasons provided; don't overstate fit.
+6. A sponsor-register match is company-level and nothing more. Never turn it into "this job is sponsored",
+   "they will sponsor you" or any claim about the user's eligibility — the register says an organisation holds
+   a licence, not that it will use it for this role, and it says nothing about salary or skill thresholds.
+   Report status "needs_confirmation" as candidates for the user to choose between, never pick for them.
+   Never report "no_register" (nothing imported) or "no_company" as "this employer is not a sponsor";
+   both mean unknown. Say when the register was imported if the result is marked stale.
 """
 
 READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
@@ -133,6 +139,15 @@ def import_linkedin_export(file_name: str) -> dict:
     return service().import_linkedin_export(file_name)
 
 
+@mcp.tool(annotations=WRITE)
+@guarded
+def import_sponsor_register(file_name: str) -> dict:
+    """Import the UK Register of Licensed Sponsors CSV, downloaded by the user from gov.uk.
+    The user must place it in the copilot's imports folder (see get_status); pass only the file name.
+    Nothing here downloads it. Replaces any previously imported register."""
+    return service().import_sponsor_register(file_name)
+
+
 # ---------------------------------------------------------------- jobs
 @mcp.tool(annotations=WRITE)
 @guarded
@@ -190,6 +205,15 @@ def get_job(job_id: int) -> dict:
 def find_referrals(job_id: int) -> dict:
     """First-degree connections (from the imported LinkedIn export) who work at this job's company."""
     return service().find_referrals(job_id)
+
+
+@mcp.tool(annotations=READ)
+@guarded
+def check_sponsor_licence(job_id: int) -> dict:
+    """Whether a UK job's employer appears on the Home Office Register of Licensed Sponsors.
+    Only meaningful for UK-located jobs; returns applicable=false otherwise. Needs the register
+    imported first (import_sponsor_register). Report the result exactly as rule 6 requires."""
+    return service().check_sponsor_licence(job_id)
 
 
 # ---------------------------------------------------------------- inbox
