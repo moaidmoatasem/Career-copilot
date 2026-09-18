@@ -1,0 +1,200 @@
+{
+  "manifest_version": "0.4",
+  "name": "career-copilot",
+  "display_name": "Career Copilot",
+  "version": "0.2.0",
+  "description": "Runs your LinkedIn-centred job search with you — without logging into LinkedIn, scraping it, or sending anything on its own.",
+  "long_description": "Career Copilot tiers job-alert emails into matched / promising / close, plans the skills blocking your targets, triages recruiter messages and flags scams, audits your LinkedIn profile against its character limits, and ranks industry news. Every message, post, application and profile edit stays a draft until you approve it yourself, in a browser page or a terminal, and carry it out on LinkedIn by hand. It never asks for your LinkedIn password or session cookie, and nothing it does touches LinkedIn's servers. All of your data stays on this machine.",
+  "author": {
+    "name": "Moayed Badawy",
+    "url": "https://github.com/moaidmoatasem"
+  },
+  "homepage": "https://github.com/moaidmoatasem/Career-copilot",
+  "documentation": "https://github.com/moaidmoatasem/Career-copilot#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moaidmoatasem/Career-copilot"
+  },
+  "license": "MIT",
+  "keywords": [
+    "job search",
+    "linkedin",
+    "careers",
+    "qa",
+    "gulf",
+    "privacy"
+  ],
+  "server": {
+    "type": "uv",
+    "entry_point": "src/career_copilot/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "career-copilot-mcp"
+      ],
+      "env": {
+        "CAREER_COPILOT_HOME": "${user_config.data_directory}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "add_course",
+      "description": "Track a course or certification the user chose."
+    },
+    {
+      "name": "add_job",
+      "description": "Add a job the user found or pasted."
+    },
+    {
+      "name": "audit_profile",
+      "description": "Audit the LinkedIn profile against target roles and in-demand skills from stored jobs."
+    },
+    {
+      "name": "build_learning_plan",
+      "description": "Time-boxed learning plan from the skill gaps, with a proof-of-skill idea per step and how many jobs would move up a tier if the user closed each gap."
+    },
+    {
+      "name": "draft_application",
+      "description": "Queue an application note or cover message for a job, for approval."
+    },
+    {
+      "name": "draft_comment",
+      "description": "Queue a comment on a LinkedIn post (max 1,250 characters) for approval."
+    },
+    {
+      "name": "draft_message_reply",
+      "description": "Queue a reply to an inbox item for the user's approval."
+    },
+    {
+      "name": "draft_outreach",
+      "description": "Queue a connection note or message to a recruiter, hiring manager or referral, for approval."
+    },
+    {
+      "name": "draft_post",
+      "description": "Queue a LinkedIn post (max 3,000 characters) for approval."
+    },
+    {
+      "name": "fetch_job_description",
+      "description": "Fetch a stored job's full description from its job-board page and re-score it."
+    },
+    {
+      "name": "fetch_missing_descriptions",
+      "description": "Fill in descriptions for stored jobs that lack one, newest first, and re-score them."
+    },
+    {
+      "name": "find_referrals",
+      "description": "First-degree connections (from the imported LinkedIn export) who work at this job's company."
+    },
+    {
+      "name": "get_approved_actions",
+      "description": "Drafts the user approved but hasn't done yet, with step-by-step instructions for doing them on LinkedIn."
+    },
+    {
+      "name": "get_audit_log",
+      "description": "Recent entries of the append-only audit log (who did what, when)."
+    },
+    {
+      "name": "get_gmail_status",
+      "description": "Whether Gmail is connected, when it was last synced, and which senders are in scope."
+    },
+    {
+      "name": "get_job",
+      "description": "Full details of one job: description, score breakdown, matched and missing skills, reasons."
+    },
+    {
+      "name": "get_news_digest",
+      "description": "Top recent news and LinkedIn digest posts ranked by the user's interests and skill gaps."
+    },
+    {
+      "name": "get_skill_gaps",
+      "description": "Skills that most often block the user's matched/promising/close jobs, with course search links."
+    },
+    {
+      "name": "get_status",
+      "description": "Overview: jobs per tier, open inbox items, drafts awaiting the user's approval, courses, and reminders."
+    },
+    {
+      "name": "import_linkedin_export",
+      "description": "Import LinkedIn's official data export ZIP (Settings → Data privacy → Get a copy of your data)."
+    },
+    {
+      "name": "ingest_email",
+      "description": "Store a notification email the user received: LinkedIn job alerts, message/InMail notifications, invitations, application updates and digests, plus Bayt/GulfTalent/NaukriGulf/Wuzzuf job alerts."
+    },
+    {
+      "name": "list_courses",
+      "description": "Tracked courses and certifications."
+    },
+    {
+      "name": "list_drafts",
+      "description": "List drafts by status, with their automatic checks (length, numbers to verify, links, flags)."
+    },
+    {
+      "name": "list_inbox",
+      "description": "Messages, invitations and application updates that need attention, highest priority first."
+    },
+    {
+      "name": "list_jobs",
+      "description": "List jobs by fit."
+    },
+    {
+      "name": "mark_executed",
+      "description": "Record that the user did an approved action on LinkedIn."
+    },
+    {
+      "name": "propose_profile_edit",
+      "description": "Queue a LinkedIn profile change for approval."
+    },
+    {
+      "name": "refresh_news",
+      "description": "Fetch the RSS/Atom feeds configured in profile.toml (https only) and rank new items by the user's interests."
+    },
+    {
+      "name": "revise_draft",
+      "description": "Replace the text of a draft that is still pending review."
+    },
+    {
+      "name": "sync_gmail",
+      "description": "Read recent job-alert and notification emails straight from the user's Gmail (read-only scope) and ingest them, so message bodies never pass through this conversation."
+    },
+    {
+      "name": "update_course",
+      "description": "Update course progress or status."
+    },
+    {
+      "name": "update_inbox_item",
+      "description": "Change an inbox item's status, e.g."
+    },
+    {
+      "name": "update_job",
+      "description": "Update a job: paste its full description (re-scores it), move it through the pipeline, or add notes."
+    },
+    {
+      "name": "withdraw_draft",
+      "description": "Withdraw a pending draft that is no longer needed."
+    }
+  ],
+  "user_config": {
+    "data_directory": {
+      "type": "directory",
+      "title": "Data folder",
+      "description": "Where your profile, job database and drafts are kept. Stays on this machine; nothing is uploaded.",
+      "default": "${HOME}/.career-copilot",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  }
+}

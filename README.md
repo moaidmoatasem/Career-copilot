@@ -38,11 +38,26 @@ cd Career-copilot
 uv run career-copilot init            # creates ~/.career-copilot/{profile.toml, imports/, copilot.db}
 ```
 
+### Installing into Claude Desktop
+
+**One click.** Build the bundle and double-click it:
+
+```bash
+./scripts/build-mcpb.sh               # needs Node, only to run the packer
+```
+
+Then in Claude Desktop: **Settings → Extensions → Advanced settings → Install Extension…** and pick
+`career-copilot.mcpb`. It asks where to keep your data and wires the rest up itself. The bundle declares
+`server.type: "uv"`, so Claude Desktop uses uv and this project's `pyproject.toml` to resolve Python and
+dependencies at install time — nothing is vendored into it, and no Python is bundled.
+
+**Or by hand,** if you prefer to see the wiring:
+
 `init` writes a starter `~/.career-copilot/profile.toml`. Open it and fill in your name, target
 titles and locations, and the skills you can defend in an interview — scoring is only as good as
 that file. It stays on your machine and is never committed.
 
-`init` prints a config block. In Claude Desktop open **Settings → Developer → Edit Config**, add it to `claude_desktop_config.json`, and fully quit and reopen Claude. The file lives at `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
+`init` prints a config block. Open **Settings → Developer → Edit Config**, add it to `claude_desktop_config.json`, and fully quit and reopen Claude. The file lives at `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS:
 
 ```json
 {
@@ -108,6 +123,25 @@ What it will and won't do:
   publish so search engines can read it — and never harvests prose from the page. A page without it
   is reported so you can paste instead. Navigation and footers would otherwise end up scored as
   skills.
+
+## Checking the install
+
+```bash
+uv run career-copilot doctor            # or --offline to skip network checks
+```
+
+One command that says whether this install actually works: data-folder and database permissions,
+database integrity and the append-only audit triggers, whether `profile.toml` parses and still holds
+template placeholders, whether the Gmail token is present with the read-only scope and still refreshes,
+whether each job board's `robots.txt` allows reading job pages, whether your feeds are reachable, and
+whether Claude Desktop has the server registered at a path that still exists.
+
+It exits `1` if anything failed, so it works in a script. `--json` gives machine-readable output.
+Nothing is created, repaired or sent — it only reads.
+
+A board reported under **reachability** could not be contacted at all, which is a network or proxy
+problem; a board reported under **robots.txt** answered and said no. Those need different fixes, so
+they are reported differently.
 
 ## Daily workflow
 
