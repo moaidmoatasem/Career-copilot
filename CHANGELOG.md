@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as disallowed.
 - Fetching only fills blanks: a company or location already recorded by you or an alert email is
   never overwritten.
+- **One-click install.** `manifest.json` makes this a Claude Desktop extension: build it with
+  `./scripts/build-mcpb.sh` and double-click the resulting `.mcpb` instead of hand-editing
+  `claude_desktop_config.json`. It declares `server.type: "uv"`, so Claude Desktop resolves Python and
+  dependencies from the existing `pyproject.toml` at install time — nothing is vendored into the
+  bundle and no Python ships inside it. The data folder is a prompted `user_config` option.
+- `.mcpbignore` keeps personal data out of the distributed file. A bundle is packed from the working
+  tree rather than from git, so `.gitignore` does not protect it: `profile.toml`, the database,
+  `gmail-token.json`, `gmail-credentials.json`, `.env` and `imports/` are excluded again there, and a
+  test asserts each pattern is present.
+- Tests pin the manifest to reality: its version must equal `pyproject.toml`'s, its
+  `compatibility.runtimes.python` must equal `requires-python`, and its declared `tools` array must
+  match the live MCP tool surface exactly — so adding a tool without declaring it fails CI.
 - **`career-copilot doctor`.** One command that checks whether an install actually works: runtime
   version, data-folder and database permissions, `PRAGMA integrity_check`, every table in the schema
   and both append-only audit triggers, whether `profile.toml` parses and whether template

@@ -1,0 +1,26 @@
+# Files that must not travel inside the distributed bundle.
+# Personal data is already covered by .gitignore, but a bundle is built from the
+# working tree, not from git — so it is spelled out again here.
+profile.toml
+my-profile.toml
+gmail-credentials.json
+gmail-token.json
+.env
+*.db
+*.db-wal
+*.db-shm
+imports/
+
+# Not needed at runtime
+tests/
+.github/
+scripts/
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+*.mcpb
