@@ -10,9 +10,9 @@ LinkedIn offers no official API that lets a personal app read your inbox, feed o
 
 | Data | Compliant source |
 |---|---|
-| New jobs | Job-alert emails read from your own mailbox — LinkedIn, Bayt, GulfTalent, NaukriGulf, Wuzzuf — and jobs you paste |
+| New jobs | Job-alert emails read from your own mailbox — LinkedIn, Bayt, GulfTalent, NaukriGulf, Wuzzuf — jobs you saved on LinkedIn (from your data export), and jobs you paste |
 | Messages & invitations | LinkedIn notification emails, and conversations in your LinkedIn data export |
-| Profile, skills, connections | LinkedIn's official "Get a copy of your data" export |
+| Profile, skills, connections, saved jobs | LinkedIn's official "Get a copy of your data" export |
 | Industry news | RSS/Atom feeds you choose, and LinkedIn digest emails |
 | Job descriptions | The `JobPosting` structured data Bayt, GulfTalent, NaukriGulf and Wuzzuf publish for search engines (robots.txt honoured) — and, for LinkedIn jobs, whatever you paste |
 
@@ -189,7 +189,12 @@ a draft only moves it to *Ready to do*, where you copy the text and act on Linke
 Known gaps, deliberately out of scope for now: no approval PIN, Settings/profile.toml editing, and no
 phone mode.
 
-For the profile audit, referrals and replies owed, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and ask Claude to import it.
+For the profile audit, referrals, replies owed and your saved jobs, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and either ask Claude to import it or run it yourself:
+
+```bash
+uv run career-copilot import-export Basic_LinkedInDataExport.zip
+uv run career-copilot import-export Basic_LinkedInDataExport.zip --saved-jobs-days 1095
+```
 
 ## Security model
 
@@ -272,6 +277,6 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 uv run --extra dev pytest        # or: pip install -e ".[dev]" && pytest
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network and news screens. GitHub Actions runs all 283 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import (including saved jobs and LinkedIn's sharded CSVs) and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network and news screens. GitHub Actions runs all 290 tests on Python 3.11 and 3.12 for every push and pull request.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).

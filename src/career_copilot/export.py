@@ -15,37 +15,54 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import emails
 from .safety import clean_text, prepare_untrusted
 from .util import company_key, strip_query
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_TOTAL_BYTES = 200 * 1024 * 1024
 WANTED = {"profile.csv", "positions.csv", "skills.csv", "education.csv", "certifications.csv",
-          "messages.csv", "connections.csv"}
+          "messages.csv", "connections.csv", "saved jobs.csv"}
+
+# LinkedIn splits large tables across numbered shards: "Saved Jobs.csv", "Saved Jobs_1.csv", …
+_SHARD_RE = re.compile(r"^(?P<stem>.+?)_\d+(?P<suffix>\.csv)$")
 
 
 class ExportError(ValueError):
     pass
 
 
-def read_export(path: Path) -> dict[str, str]:
-    """Return {lower-case CSV file name: text} for the files we use. Never extracts to disk."""
-    files: dict[str, str] = {}
+def canonical_name(file_name: str) -> str:
+    """Fold a shard name onto the table it belongs to: 'Saved Jobs_1.csv' -> 'saved jobs.csv'."""
+    name = file_name.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    match = _SHARD_RE.match(name)
+    return match.group("stem") + match.group("suffix") if match else name
+
+
+def read_export(path: Path) -> dict[str, list[str]]:
+    """Return {canonical CSV name: [shard text, …]} for the files we use. Never extracts to disk."""
+    files: dict[str, list[str]] = defaultdict(list)
     if path.is_dir():
+        total = 0
         for csv_path in sorted(path.rglob("*.csv")):
-            name = csv_path.name.lower()
-            if name in WANTED and name not in files:
-                if csv_path.stat().st_size > MAX_FILE_BYTES:
-                    raise ExportError(f"{csv_path.name} is larger than {MAX_FILE_BYTES // 2**20} MB")
-                files[name] = csv_path.read_text(encoding="utf-8-sig", errors="replace")
-        return files
+            name = canonical_name(csv_path.name)
+            if name not in WANTED:
+                continue
+            size = csv_path.stat().st_size
+            total += size
+            if size > MAX_FILE_BYTES:
+                raise ExportError(f"{csv_path.name} is larger than {MAX_FILE_BYTES // 2**20} MB")
+            if total > MAX_TOTAL_BYTES:
+                raise ExportError("export folder is unexpectedly large; refusing to read it")
+            files[name].append(csv_path.read_text(encoding="utf-8-sig", errors="replace"))
+        return dict(files)
     if not zipfile.is_zipfile(path):
         raise ExportError("expected the LinkedIn export .zip (or a folder with its CSV files)")
     total = 0
     with zipfile.ZipFile(path) as archive:
-        for info in archive.infolist():
-            name = info.filename.replace("\\", "/").rsplit("/", 1)[-1].lower()
-            if info.is_dir() or name not in WANTED or name in files:
+        for info in sorted(archive.infolist(), key=lambda i: i.filename):
+            name = canonical_name(info.filename)
+            if info.is_dir() or name not in WANTED:
                 continue
             total += info.file_size
             if info.file_size > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES:
@@ -54,8 +71,8 @@ def read_export(path: Path) -> dict[str, str]:
                 data = handle.read(MAX_FILE_BYTES + 1)
             if len(data) > MAX_FILE_BYTES:
                 raise ExportError(f"{name} is larger than declared; refusing to read it")
-            files[name] = data.decode("utf-8-sig", errors="replace")
-    return files
+            files[name].append(data.decode("utf-8-sig", errors="replace"))
+    return dict(files)
 
 
 def read_rows(text: str, required: set[str]) -> list[dict[str, str]]:
@@ -72,6 +89,14 @@ def read_rows(text: str, required: set[str]) -> list[dict[str, str]]:
                 for row in reader
             ]
     return []
+
+
+def read_table(files: dict[str, list[str]], name: str, required: set[str]) -> list[dict[str, str]]:
+    """Rows of one export table, read across every shard LinkedIn split it into."""
+    rows: list[dict[str, str]] = []
+    for text in files.get(name, []):
+        rows.extend(read_rows(text, required))
+    return rows
 
 
 _MONTHS = {m: i for i, m in enumerate(
@@ -114,16 +139,16 @@ def profile_slug(url: str) -> str:
     return match.group(1).lower().rstrip("/") if match else ""
 
 
-def parse_profile(files: dict[str, str]) -> dict:
+def parse_profile(files: dict[str, list[str]]) -> dict:
     snapshot: dict = {}
-    rows = read_rows(files.get("profile.csv", ""), {"first name", "last name"})
+    rows = read_table(files, "profile.csv", {"first name", "last name"})
     if rows:
         row = rows[0]
         snapshot["name"] = f"{row.get('first name', '')} {row.get('last name', '')}".strip()
         snapshot["headline"] = row.get("headline", "")
         snapshot["about"] = row.get("summary", "")
         snapshot["location"] = row.get("geo location", "")
-    positions = read_rows(files.get("positions.csv", ""), {"company name", "title"})
+    positions = read_table(files, "positions.csv", {"company name", "title"})
     if positions:
         snapshot["positions"] = [
             {
@@ -136,17 +161,17 @@ def parse_profile(files: dict[str, str]) -> dict:
             }
             for p in positions
         ]
-    skills = [r["name"] for r in read_rows(files.get("skills.csv", ""), {"name"}) if r.get("name")]
+    skills = [r["name"] for r in read_table(files, "skills.csv", {"name"}) if r.get("name")]
     if skills:
         snapshot["skills"] = skills
-    education = read_rows(files.get("education.csv", ""), {"school name"})
+    education = read_table(files, "education.csv", {"school name"})
     if education:
         snapshot["education"] = [
             {"school": e.get("school name", ""), "degree": e.get("degree name", ""),
              "start": e.get("start date", ""), "end": e.get("end date", "")}
             for e in education
         ]
-    certifications = read_rows(files.get("certifications.csv", ""), {"name", "authority"})
+    certifications = read_table(files, "certifications.csv", {"name", "authority"})
     if certifications:
         snapshot["certifications"] = [
             {"name": c.get("name", ""), "authority": c.get("authority", ""),
@@ -157,14 +182,14 @@ def parse_profile(files: dict[str, str]) -> dict:
 
 
 def conversations_awaiting_reply(
-    files: dict[str, str],
+    files: dict[str, list[str]],
     me_url: str,
     me_name: str,
     lookback_days: int,
     now: datetime | None = None,
 ) -> tuple[list[dict], str | None]:
     """Conversations whose latest message is from someone else, within the lookback window."""
-    rows = read_rows(files.get("messages.csv", ""), {"conversation id", "from", "date"})
+    rows = read_table(files, "messages.csv", {"conversation id", "from", "date"})
     if not rows:
         return [], None
     me_slug = profile_slug(me_url)
@@ -206,8 +231,8 @@ def conversations_awaiting_reply(
     return waiting, None
 
 
-def parse_connections(files: dict[str, str]) -> list[dict]:
-    rows = read_rows(files.get("connections.csv", ""), {"first name", "last name", "company"})
+def parse_connections(files: dict[str, list[str]]) -> list[dict]:
+    rows = read_table(files, "connections.csv", {"first name", "last name", "company"})
     connections = []
     for row in rows:
         name = clean_text(f"{row.get('first name', '')} {row.get('last name', '')}", 120)
@@ -224,3 +249,64 @@ def parse_connections(files: dict[str, str]) -> list[dict]:
             "connected_on": row.get("connected on", ""),
         })
     return connections
+
+
+_SAVED_DATE_FORMATS = ("%m/%d/%y, %I:%M %p", "%m/%d/%Y, %I:%M %p", "%m/%d/%y", "%m/%d/%Y")
+
+
+def parse_saved_date(value: str) -> datetime | None:
+    value = value.strip()
+    for fmt in _SAVED_DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return parse_message_date(value)
+
+
+def parse_saved_jobs(
+    files: dict[str, list[str]],
+    since_days: int = 365,
+    now: datetime | None = None,
+) -> tuple[list[dict], dict[str, int]]:
+    """Jobs you saved on LinkedIn, newest first, plus a count of the rows left out and why.
+
+    These are yours and come from LinkedIn's own export, so no scraping is involved. The export
+    carries only the title, company and link — the description still has to be pasted in, which
+    keeps the job capped at *promising* until you do. LinkedIn blanks the title and company of
+    saved jobs whose posting has since been taken down; those rows are counted, not imported,
+    because a job with no title cannot be scored.
+    """
+    skipped = {"older_than_window": 0, "without_title": 0}
+    rows = read_table(files, "saved jobs.csv", {"job url", "job title"})
+    if not rows:
+        return [], skipped
+    now = now or datetime.now(timezone.utc)
+    jobs: dict[str, dict] = {}
+    for row in rows:
+        title = clean_text(row.get("job title", ""), 200)
+        url = (row.get("job url", "") or "").strip()
+        match = emails.LI_JOB_RE.search(url)
+        if not match:
+            continue
+        if not title:
+            skipped["without_title"] += 1
+            continue
+        saved_at = parse_saved_date(row.get("saved date", ""))
+        if saved_at and (now - saved_at).days > since_days:
+            skipped["older_than_window"] += 1
+            continue
+        job_id = match.group(1)
+        entry = {
+            "external_id": job_id,
+            "title": title,
+            "company": clean_text(row.get("company name", ""), 160),
+            "url": f"https://www.linkedin.com/jobs/view/{job_id}/",
+            "saved_on": saved_at.date().isoformat() if saved_at else "",
+        }
+        # The same job can be saved in more than one shard; keep the most recent record of it.
+        previous = jobs.get(job_id)
+        if previous is None or entry["saved_on"] > previous["saved_on"]:
+            jobs[job_id] = entry
+    ordered = sorted(jobs.values(), key=lambda job: job["saved_on"], reverse=True)
+    return ordered, skipped
