@@ -342,3 +342,175 @@ def test_data_page_shows_register_provenance_once_imported(logged_in, cp):
     r = logged_in.get("/data")
     assert "Open Government Licence" in r.text
     assert "register.csv" in r.text
+
+
+# ---------------------------------------------------------------------------- orphaned features
+
+def test_fetch_button_offered_for_a_fetchable_board(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "https://www.bayt.com/en/job-12345/")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "Fetch from" in r.text
+    assert "bayt.com" in r.text
+
+
+def test_fetch_is_not_offered_for_linkedin_and_says_why(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "https://www.linkedin.com/jobs/view/4321/")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "Fetch from" not in r.text
+    assert "Can&#x27;t fetch this one" in r.text or "Can't fetch this one" in r.text
+
+
+def test_fetch_button_absent_without_a_url(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "Fetch from" not in r.text
+
+
+def test_fetch_button_absent_once_a_description_exists(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "https://www.bayt.com/en/job-1/",
+                     "A description that already exists. " * 10)
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "Fetch from" not in r.text
+
+
+def test_fetch_post_on_a_linkedin_job_is_an_error_not_a_crash(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "https://www.linkedin.com/jobs/view/999/")
+    r = logged_in.post(f"/jobs/{job['id']}/fetch", follow_redirects=False)
+    assert r.status_code == 303
+    assert "error=" in r.headers["location"]
+
+
+def test_fetch_post_succeeds_and_reports_the_source(logged_in, cp, monkeypatch):
+    job = cp.add_job("Senior QA Engineer", "Acme", "Cairo, Egypt", "https://www.bayt.com/en/job-7/")
+    description = ("Requirements: 5+ years in test automation, strong Python and Playwright, "
+                   "API testing, CI/CD pipelines and Docker. " * 4)
+    monkeypatch.setattr(type(cp), "fetch_job_page",
+                        staticmethod(lambda url: {"description": description, "company": "", "location": ""}))
+    r = logged_in.post(f"/jobs/{job['id']}/fetch", follow_redirects=False)
+    assert r.status_code == 303
+    assert "ok=" in r.headers["location"]
+    assert "bayt.com" in r.headers["location"]
+    assert cp.get_job(job["id"])["has_description"]
+
+
+def test_referrals_card_degrades_without_an_export(logged_in, cp):
+    job = cp.add_job("QA Engineer", "Acme Corp", "Cairo, Egypt", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "People you know at" in r.text
+    assert "data export" in r.text
+
+
+def test_referrals_card_absent_when_the_job_has_no_company(logged_in, cp):
+    job = cp.add_job("QA Engineer", "", "Cairo, Egypt", "")
+    r = logged_in.get(f"/jobs/{job['id']}")
+    assert "People you know at" not in r.text
+
+
+# ---------------------------------------------------------------------------- career path
+
+def _job_with_description(cp, title="Senior QA Engineer"):
+    from conftest import MATCHED_DESCRIPTION
+    return cp.add_job(title, "Acme", "Cairo, Egypt", "", MATCHED_DESCRIPTION)
+
+
+def test_career_gaps_tab_lists_blocking_skills(logged_in, cp):
+    _job_with_description(cp)
+    r = logged_in.get("/career?tab=gaps")
+    assert r.status_code == 200
+    assert "Find a course" in r.text
+
+
+def test_career_plan_tab_labels_its_projection(logged_in, cp):
+    _job_with_description(cp)
+    r = logged_in.get("/career?tab=plan")
+    assert r.status_code == 200
+    assert "not a promise" in r.text
+
+
+def test_career_plan_accepts_week_and_hour_controls(logged_in, cp):
+    _job_with_description(cp)
+    r = logged_in.get("/career?tab=plan&weeks=8&hours=10")
+    assert r.status_code == 200
+    assert "8 weeks" in r.text
+
+
+def test_career_handles_junk_query_params(logged_in, cp):
+    for path in ("/career?tab=nonsense", "/career?tab=plan&weeks=abc&hours=-5", "/activity?limit=zzz"):
+        assert logged_in.get(path).status_code == 200
+
+
+def test_add_course_through_the_console(logged_in, cp):
+    r = logged_in.post("/career/courses", data={"skill": "kubernetes", "title": "K8s Basics",
+                                                "provider": "Coursera", "url": "", "target_date": ""},
+                       follow_redirects=False)
+    assert r.status_code == 303
+    assert [c["title"] for c in cp.list_courses()["courses"]] == ["K8s Basics"]
+
+
+def test_add_course_rejects_a_bad_target_date(logged_in, cp):
+    r = logged_in.post("/career/courses", data={"skill": "k8s", "title": "K8s", "provider": "",
+                                                "url": "", "target_date": "next tuesday"},
+                       follow_redirects=False)
+    assert "error=" in r.headers["location"]
+    assert cp.list_courses()["count"] == 0
+
+
+def test_progress_100_completes_the_course_as_the_page_promises(logged_in, cp):
+    cp.add_course("playwright", "PW Course", "Udemy", "", "")
+    course_id = cp.list_courses()["courses"][0]["id"]
+    r = logged_in.post(f"/career/courses/{course_id}", data={"progress_pct": "100"}, follow_redirects=False)
+    assert r.status_code == 303
+    row = cp.list_courses()["courses"][0]
+    assert row["status"] == "completed"
+    assert row["progress_pct"] == 100
+
+
+def test_status_dropdown_changes_status_without_touching_progress(logged_in, cp):
+    cp.add_course("playwright", "PW Course", "Udemy", "", "")
+    course_id = cp.list_courses()["courses"][0]["id"]
+    logged_in.post(f"/career/courses/{course_id}", data={"progress_pct": "40"}, follow_redirects=False)
+    logged_in.post(f"/career/courses/{course_id}", data={"status": "dropped"}, follow_redirects=False)
+    row = cp.list_courses()["courses"][0]
+    assert row["status"] == "dropped"
+    assert row["progress_pct"] == 40
+
+
+def test_bad_progress_value_is_an_error_not_a_crash(logged_in, cp):
+    cp.add_course("playwright", "PW Course", "", "", "")
+    course_id = cp.list_courses()["courses"][0]["id"]
+    r = logged_in.post(f"/career/courses/{course_id}", data={"progress_pct": "abc"}, follow_redirects=False)
+    assert "error=" in r.headers["location"]
+
+
+# ---------------------------------------------------------------------------- activity
+
+def test_activity_shows_the_audit_trail(logged_in, cp):
+    cp.add_job("QA Engineer", "Acme", "Cairo, Egypt", "")
+    r = logged_in.get("/activity")
+    assert r.status_code == 200
+    assert "job.add" in r.text
+    assert "append-only" in r.text
+
+
+def test_activity_exposes_no_write_route(app):
+    paths = [route.path for route in app.routes]
+    assert not [p for p in paths if p.startswith("/activity") and p != "/activity"]
+    for route in app.routes:
+        if route.path == "/activity":
+            assert set(route.methods or set()) <= {"GET", "HEAD"}
+
+
+# ---------------------------------------------------------------------------- honesty guards
+
+def test_no_console_page_claims_an_action_on_linkedin(logged_in, cp):
+    cp.add_job("QA Engineer", "Acme Corp", "Cairo, Egypt", "https://www.bayt.com/en/job-3/")
+    cp.add_course("playwright", "PW Course", "", "", "")
+    # Affirmative claims only. "Nothing is ever sent to LinkedIn" is the promise, not a violation,
+    # so the phrases here are ones that cannot appear in a negated form by accident.
+    forbidden = ("we sent", "we posted", "has been sent", "has been posted", "was sent to linkedin",
+                 "successfully applied", "applied on your behalf", "message sent")
+    for path in ("/", "/review", "/jobs", "/jobs/1", "/career?tab=gaps", "/career?tab=plan",
+                 "/career?tab=courses", "/inbox", "/activity", "/data"):
+        text = logged_in.get(path).text.lower()
+        for phrase in forbidden:
+            assert phrase not in text, f"{path} contains {phrase!r}"

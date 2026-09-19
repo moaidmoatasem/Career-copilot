@@ -160,8 +160,8 @@ Other prompts: **Weekly career review**, **Job deep dive** (needs a job id), **P
 
 ## Copilot Console
 
-`career-copilot console` starts a small local web app — Today, Review, Jobs, Inbox, and Data & privacy —
-and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
+`career-copilot console` starts a small local web app — Today, Review, Jobs, Career path, Inbox,
+Activity, and Data & privacy — and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
 Claude and it never reaches LinkedIn. There is no "send", "post" or "apply" button anywhere in it: approving
 a draft only moves it to *Ready to do*, where you copy the text and act on LinkedIn yourself.
 
@@ -176,9 +176,14 @@ a draft only moves it to *Ready to do*, where you copy the text and act on Linke
   next draft, `k` previous, `?` for the shortcut list.
 - `career-copilot review` (the terminal reviewer) stays available at parity — useful when the Console isn't
   running, or as the one surface a browser automation agent can't reach.
+- The job page offers **Fetch** for boards the fetcher may read (a LinkedIn job explains why it can't
+  instead of showing a dead button), and lists the people you already know at that company.
+- **Career path** ranks the skills blocking your jobs, plans them against the hours you actually have, and
+  tracks courses. Anything forward-looking there is labelled a projection rather than a promise.
+- **Activity** is the audit trail, read-only over a log the database keeps append-only.
 
-Known gaps, deliberately out of scope for this first pass: no approval PIN, Settings/profile.toml editing,
-Career path, Profile audit, Network and News screens (still terminal/Claude-only for now), and no phone mode.
+Known gaps, deliberately out of scope for now: no approval PIN, Settings/profile.toml editing, Profile
+audit, Network and News screens (still terminal/Claude-only), and no phone mode.
 
 For the profile audit, referrals and replies owed, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and ask Claude to import it.
 
@@ -264,6 +269,6 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 uv run --extra dev pytest        # or: pip install -e ".[dev]" && pytest
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge), and sponsor-register matching against the real collisions in it. GitHub Actions runs all 198 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career/activity screens. GitHub Actions runs all 265 tests on Python 3.11 and 3.12 for every push and pull request.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).

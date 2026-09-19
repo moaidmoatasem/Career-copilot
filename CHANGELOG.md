@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The Console reaches two features that already existed.** `fetch_job_description` and
+  `find_referrals` shipped working, were exposed to Claude, and had no button anywhere — the only
+  way to use either was to ask. The job page now offers both: a **Fetch** button (shown only when
+  the job has a URL, has no description yet, and sits on a board the fetcher is allowed to read —
+  a LinkedIn job gets the reason in words instead of a dead button), and a **People you know here**
+  card listing first-degree connections from your export. The card informs; it never offers to
+  contact anyone.
+- **Career path screen** (`/career`): skill gaps ranked by demand with course-search links, a
+  learning plan with weeks/hours controls, capacity against your available hours, what did not fit,
+  and which jobs would move up a tier — labelled a projection, not a promise. Courses are tracked
+  from the same screen.
+- **Activity screen** (`/activity`): the full audit trail — who did what, when — read-only, with no
+  write route, over a log the database itself keeps append-only.
+- Course status and progress are submitted separately on purpose: `update_course` only applies its
+  "100% means completed" rule when no status accompanies the progress, so sending both would have
+  silently contradicted what the page tells you.
 - **UK sponsor-licence check.** For UK-located jobs, `check_sponsor_licence` and the Console's job
   page say whether the employer appears on the Home Office Register of Licensed Sponsors. You
   import the register yourself: download the CSV from gov.uk, put it in the imports folder, and run
