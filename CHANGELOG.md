@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Your saved jobs come in with the export.** LinkedIn's data export carries every job you saved,
+  and the importer was throwing all of them away — on a real export that was 341 jobs discarded by a
+  tool whose whole job is scoring jobs. They are now read, scored and deduped against jobs already
+  ingested from alert emails, so a job you saved and a job you were emailed stay one row. The export
+  carries only title, company and link, so a saved job is capped at *promising* until you paste the
+  description, exactly like any other job without one.
+- `import_linkedin_export` takes **`saved_jobs_days`** (default 365) to bound how far back to read,
+  and reports what it left out and why: jobs older than the window, and jobs LinkedIn exports without
+  a title because the posting has since been taken down. Nothing is dropped silently.
+- **`career-copilot import-export`**, so the LinkedIn export can be imported from a terminal. Every
+  other import already had a CLI command; this one was reachable only by asking Claude, which meant a
+  downloaded ZIP had no way in without Claude Desktop running.
+
+### Fixed
+
+- **LinkedIn's sharded CSVs are read in full.** LinkedIn splits large tables across numbered files
+  (`Saved Jobs.csv`, `Saved Jobs_1.csv`, …) and the reader kept only the first one it saw, so accounts
+  large enough to be sharded silently lost the rest — connections and messages included, not just
+  saved jobs. Shards are now folded onto the table they belong to and read together.
+
 ## [0.3.0] - 2026-09-19
 
 ### Added

@@ -132,11 +132,13 @@ def get_gmail_status() -> dict:
 
 @mcp.tool(annotations=WRITE)
 @guarded
-def import_linkedin_export(file_name: str) -> dict:
+def import_linkedin_export(file_name: str, saved_jobs_days: int = 365) -> dict:
     """Import LinkedIn's official data export ZIP (Settings → Data privacy → Get a copy of your data).
     The user must place it in the copilot's imports folder (see get_status); pass only the file name.
-    Loads profile sections, conversations awaiting the user's reply, and connections (without emails)."""
-    return service().import_linkedin_export(file_name)
+    Loads profile sections, conversations awaiting the user's reply, connections (without emails), and
+    jobs the user saved on LinkedIn within saved_jobs_days (title, company and link only — saved jobs
+    stay capped at 'promising' until the user pastes a description)."""
+    return service().import_linkedin_export(file_name, saved_jobs_days)
 
 
 @mcp.tool(annotations=WRITE)

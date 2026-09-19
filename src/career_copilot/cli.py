@@ -257,6 +257,32 @@ def cmd_gmail_auth(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_export(args: argparse.Namespace) -> int:
+    copilot = Copilot()
+    try:
+        result = copilot.import_linkedin_export(args.file_name, args.saved_jobs_days)
+    finally:
+        copilot.store.close()
+    print(good(f"Imported {args.file_name} — read {', '.join(result['files_read'])}."))
+    print(f"  Profile sections: {', '.join(result['profile_sections']) or 'none'}")
+    print(f"  {result['positions']} position(s), {result['skills']} skill(s), {result['connections']:,} connection(s).")
+    if result["conversations_awaiting_reply"]:
+        print(f"  {result['conversations_awaiting_reply']} conversation(s) waiting on your reply.")
+    if result["saved_jobs_read"]:
+        print(f"  {result['saved_jobs_read']} saved job(s) in the last {args.saved_jobs_days} days"
+              f" — {result['saved_jobs_added']} new.")
+    if result["saved_jobs_older_than_window"]:
+        print(f"  {result['saved_jobs_older_than_window']} saved job(s) were older than that and left out"
+              f" (raise --saved-jobs-days to include them).")
+    if result["saved_jobs_no_longer_posted"]:
+        print(f"  {result['saved_jobs_no_longer_posted']} saved job(s) are no longer posted on LinkedIn"
+              f" (it exports them without a title) and were left out.")
+    if result.get("note"):
+        print(warn(f"  {result['note']}"))
+    print(f"\n{result['privacy']}")
+    return 0
+
+
 def cmd_import_sponsors(args: argparse.Namespace) -> int:
     copilot = Copilot()
     try:
@@ -367,6 +393,12 @@ def main(argv: list[str] | None = None) -> int:
     log = sub.add_parser("log", help="show the audit log")
     log.add_argument("-n", type=int, default=30)
     log.set_defaults(func=cmd_log)
+    export_cmd = sub.add_parser("import-export",
+                                help="import LinkedIn's official data export ZIP from the imports folder")
+    export_cmd.add_argument("file_name", help="file name of the export ZIP you placed in the imports folder")
+    export_cmd.add_argument("--saved-jobs-days", type=int, default=365, dest="saved_jobs_days",
+                            help="how far back to read jobs you saved on LinkedIn (default: 365)")
+    export_cmd.set_defaults(func=cmd_import_export)
     sponsors_cmd = sub.add_parser("import-sponsors",
                                   help="import the UK Register of Licensed Sponsors CSV from the imports folder")
     sponsors_cmd.add_argument("file_name", help="file name of the CSV you downloaded from gov.uk")

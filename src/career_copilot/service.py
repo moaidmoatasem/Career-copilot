@@ -431,7 +431,7 @@ class Copilot:
             "scope": gmail.SCOPE,
         }
 
-    def import_linkedin_export(self, file_name: str) -> dict:
+    def import_linkedin_export(self, file_name: str, saved_jobs_days: int = 365) -> dict:
         self.imports_dir.mkdir(parents=True, exist_ok=True)
         base = self.imports_dir.resolve()
         name = (file_name or "").strip()
@@ -479,6 +479,15 @@ class Copilot:
                 "flags": conversation["flags"],
                 "status": "needs_reply",
             })
+        saved_jobs, saved_skipped = export.parse_saved_jobs(files, max(0, saved_jobs_days))
+        saved_added = 0
+        for job in saved_jobs:
+            saved_note = f"Saved on LinkedIn on {job['saved_on']}." if job["saved_on"] else "Saved on LinkedIn."
+            _, created = self._upsert_job(
+                source="linkedin", external_id=job["external_id"], title=job["title"],
+                company=job["company"], location="", url=job["url"], notes=saved_note,
+            )
+            saved_added += created
         connections = export.parse_connections(files)
         if connections:
             with self.store.transaction() as conn:
@@ -496,13 +505,19 @@ class Copilot:
             "skills": len(snapshot.get("skills", [])),
             "conversations_awaiting_reply": len(conversations),
             "connections": len(connections),
+            "saved_jobs_read": len(saved_jobs),
+            "saved_jobs_added": saved_added,
+            "saved_jobs_older_than_window": saved_skipped["older_than_window"],
+            "saved_jobs_no_longer_posted": saved_skipped["without_title"],
             "privacy": "Kept locally: profile sections, the latest-message preview of conversations waiting on you "
-                       f"(last {profile.retention_days} days), and connections without email addresses.",
+                       f"(last {profile.retention_days} days), jobs you saved on LinkedIn in the last "
+                       f"{saved_jobs_days} days, and connections without email addresses.",
         }
         if note:
             summary["note"] = note
         self.store.audit("assistant", "export.import", name, {
-            k: summary[k] for k in ("positions", "skills", "conversations_awaiting_reply", "connections")
+            k: summary[k] for k in ("positions", "skills", "conversations_awaiting_reply", "connections",
+                                    "saved_jobs_added")
         })
         return summary
 

@@ -123,7 +123,7 @@
     },
     {
       "name": "import_linkedin_export",
-      "description": "Import LinkedIn's official data export ZIP (Settings → Data privacy → Get a copy of your data)."
+      "description": "Import LinkedIn's official data export ZIP (Settings → Data privacy → Get a copy of your data), including the jobs you saved there."
     },
     {
       "name": "import_sponsor_register",
