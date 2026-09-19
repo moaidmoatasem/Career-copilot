@@ -160,7 +160,7 @@ Other prompts: **Weekly career review**, **Job deep dive** (needs a job id), **P
 
 ## Copilot Console
 
-`career-copilot console` starts a small local web app — Today, Review, Jobs, Inbox, and Data & privacy —
+`career-copilot console` starts a small local web app — Today, Review, Jobs, Inbox, Career path, Profile audit, Network, News, and Data & privacy —
 and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
 Claude and it never reaches LinkedIn. There is no "send", "post" or "apply" button anywhere in it: approving
 a draft only moves it to *Ready to do*, where you copy the text and act on LinkedIn yourself.
@@ -177,8 +177,13 @@ a draft only moves it to *Ready to do*, where you copy the text and act on Linke
 - `career-copilot review` (the terminal reviewer) stays available at parity — useful when the Console isn't
   running, or as the one surface a browser automation agent can't reach.
 
-Known gaps, deliberately out of scope for this first pass: no approval PIN, Settings/profile.toml editing,
-Career path, Profile audit, Network and News screens (still terminal/Claude-only for now), and no phone mode.
+**Career path** ranks the skills blocking your targets, shows the time-boxed plan, and tracks courses.
+**Profile audit** lists findings by severity and what your target jobs keep asking for. **Network** finds
+first-degree connections at a job's company. **News** ranks your feeds and can refresh them. Every action on
+these screens queues a draft for Review — none of them can approve one.
+
+Known gaps, deliberately out of scope for now: no approval PIN, no `profile.toml` editing from the Data
+screen, and no phone mode.
 
 For the profile audit, referrals and replies owed, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and ask Claude to import it.
 
@@ -251,9 +256,8 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 
 ## Roadmap
 
-- **Next:** an approval PIN and idle-lock unlock for the Console, Career path / Profile audit / Network / News
-  screens in the Console (today they're Claude- and terminal-only), packaging as a one-click Claude Desktop
-  extension, and widening description coverage beyond the four Gulf boards.
+- **Next:** an approval PIN and idle-lock unlock for the Console, editing `profile.toml` from the Data screen,
+  and widening description coverage beyond the four Gulf boards.
 - **Later:** an optional phone approval mode, official *Share on LinkedIn* posting for approved posts (OAuth,
   `w_member_social`; tokens last 60 days and need manual re-authorisation), more job boards, calendar-aware
   interview prep.

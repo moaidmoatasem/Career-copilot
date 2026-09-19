@@ -38,7 +38,8 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from .service import ACTIVE_TIERS, ALL_TIERS, INBOX_STATUSES, JOB_STATUSES, Copilot, CopilotError
+from .service import (ACTIVE_TIERS, ALL_TIERS, COURSE_STATUSES, INBOX_STATUSES, JOB_STATUSES,
+                      Copilot, CopilotError)
 
 IDLE_TIMEOUT_SECONDS = 15 * 60
 LAUNCH_TOKEN_TTL_SECONDS = 10 * 60
@@ -51,6 +52,10 @@ NAV_ITEMS = [
     ("/review", "Review"),
     ("/jobs", "Jobs"),
     ("/inbox", "Inbox"),
+    ("/path", "Career path"),
+    ("/profile", "Profile"),
+    ("/network", "Network"),
+    ("/news", "News"),
     ("/data", "Data & privacy"),
 ]
 
@@ -990,6 +995,338 @@ async def static_js(request: Request) -> Response:
 
 # ---------------------------------------------------------------------------- app factory
 
+# ---------------------------------------------------------------------------- Career path
+
+def _gap_row(gap: dict) -> str:
+    tracked = "".join(
+        f'<div class="muted">tracking: {esc(c["title"])} ({esc(c["status"])}, {c["progress_pct"]}%)</div>'
+        for c in gap.get("tracked_courses", [])
+    )
+    links = " · ".join(
+        f'<a href="{esc(url)}" target="_blank" rel="noopener noreferrer">{esc(name.replace("_", " "))}</a>'
+        for name, url in (gap.get("find_courses") or {}).items()
+    )
+    learning = ' <span class="chip">already learning</span>' if gap["status"] == "learning" else ""
+    return f"""<tr>
+  <td><strong>{esc(gap['skill'])}</strong>{learning}<div class="muted">{esc(gap['category'])}</div>{tracked}</td>
+  <td>{gap['jobs']}</td>
+  <td class="muted">{esc(', '.join(gap['example_jobs'][:2]))}</td>
+  <td class="muted">{links}</td>
+</tr>"""
+
+
+def _plan_step(step: dict) -> str:
+    upgrades = step.get("jobs_it_would_upgrade")
+    upgrade_note = f'<div class="muted">would move {upgrades} job(s) up a tier</div>' if upgrades else ""
+    return f"""<div class="card">
+  <strong>Weeks {esc(step['weeks'])} · {esc(step['skill'])}</strong>
+  <span class="muted">~{step['estimated_hours']}h</span>
+  <p class="muted">{esc(step['why'])}</p>
+  {upgrade_note}
+  <p>Proof of skill: {esc(step['proof_of_skill'])}</p>
+</div>"""
+
+
+def career_path(request: Request) -> HTMLResponse:
+    cp: Copilot = request.app.state.cp
+    gaps = cp.skill_gaps(15)
+    plan = cp.learning_plan()
+    courses = cp.list_courses()["courses"]
+
+    if gaps["gaps"]:
+        gap_table = ('<table><thead><tr><th>Skill</th><th>Jobs blocked</th><th>For example</th>'
+                     f'<th>Find a course</th></tr></thead><tbody>{"".join(_gap_row(g) for g in gaps["gaps"])}'
+                     '</tbody></table>')
+    else:
+        gap_table = (f'<p class="muted">{esc(gaps.get("note", "No gaps measured yet."))}</p>'
+                     '<p class="muted">Jobs need full descriptions before missing skills can be measured — '
+                     'try <code>career-copilot fetch-descriptions</code>, or paste one on a job.</p>')
+
+    steps = "".join(_plan_step(s) for s in plan["steps"]) or '<p class="muted">Nothing to plan yet.</p>'
+    progression = plan.get("if_you_complete_the_plan") or {}
+    progression_note = (
+        f'<p>If you finish this plan, {progression.get("jobs_upgraded", 0)} stored job(s) would move up a tier.</p>'
+        if progression else ""
+    )
+
+    course_rows = "".join(f"""<tr>
+  <td><strong>{esc(c['title'])}</strong><div class="muted">{esc(c['skill'])}{' · ' + esc(c['provider']) if c['provider'] else ''}</div></td>
+  <td>
+    <form method="post" action="/path/courses/{c['id']}">
+      <select name="status" data-autosubmit>{''.join(
+          f'<option value="{s}"{" selected" if s == c["status"] else ""}>{s}</option>' for s in COURSE_STATUSES)}</select>
+    </form>
+  </td>
+  <td>
+    <form method="post" action="/path/courses/{c['id']}">
+      <input type="number" name="progress_pct" min="0" max="100" value="{c['progress_pct']}" style="width:5em">
+      <button type="submit" class="btn secondary">Save</button>
+    </form>
+  </td>
+</tr>""" for c in courses)
+    course_table = (f'<table><thead><tr><th>Course</th><th>Status</th><th>Progress</th></tr></thead>'
+                    f'<tbody>{course_rows}</tbody></table>') if courses else \
+        '<p class="muted">No courses tracked yet.</p>'
+
+    body = f"""
+{banner_from_query(request)}
+<div class="card">
+  <h2>Skills blocking your targets</h2>
+  {gap_table}
+</div>
+<h2>A plan for the next {plan['weeks']} weeks</h2>
+<p class="muted">{plan['hours_planned']} of {plan['capacity_hours']} hours planned at
+   {plan['hours_per_week']}h/week. {esc(plan['note'])}</p>
+{progression_note}
+<div class="grid">{steps}</div>
+<div class="card">
+  <h2>Courses you are tracking</h2>
+  {course_table}
+  <form method="post" action="/path/courses" class="row" style="margin-top:12px">
+    <input type="text" name="skill" placeholder="skill (e.g. kubernetes)" required>
+    <input type="text" name="title" placeholder="course title" required>
+    <input type="text" name="provider" placeholder="provider (optional)">
+    <input type="url" name="url" placeholder="https://… (optional)">
+    <button type="submit" class="btn">Track course</button>
+  </form>
+</div>
+"""
+    return layout(request, title="Career path", active="/path", body=body)
+
+
+async def course_add(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    form = await request.form()
+    try:
+        cp.add_course(str(form.get("skill", "")), str(form.get("title", "")),
+                      str(form.get("provider", "")), str(form.get("url", "")))
+    except CopilotError as exc:
+        return error_redirect("/path", str(exc))
+    return RedirectResponse("/path?ok=Course+added", status_code=303)
+
+
+async def course_update(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    course_id = int(request.path_params["course_id"])
+    form = await request.form()
+    status = str(form["status"]) if form.get("status") else None
+    raw_progress = form.get("progress_pct")
+    try:
+        progress = int(str(raw_progress)) if raw_progress not in (None, "") else None
+    except ValueError:
+        return error_redirect("/path", "progress must be a whole number between 0 and 100")
+    try:
+        cp.update_course(course_id, status=status, progress_pct=progress)
+    except CopilotError as exc:
+        return error_redirect("/path", str(exc))
+    return RedirectResponse("/path", status_code=303)
+
+
+# ---------------------------------------------------------------------------- Profile audit
+
+PROFILE_SECTIONS = ("headline", "about", "skills")
+
+
+def profile_audit_screen(request: Request) -> HTMLResponse:
+    cp: Copilot = request.app.state.cp
+    audit = cp.audit_profile()
+    summary = audit["summary"]
+
+    if audit["findings"]:
+        findings = "".join(f"""<tr>
+  <td>{esc(f['section'])}</td>
+  <td><span class="chip {'bad' if f['severity'] == 'high' else ''}">{esc(f['severity'])}</span></td>
+  <td>{esc(f['finding'])}<div class="muted">{esc(f['suggestion'])}</div></td>
+</tr>""" for f in audit["findings"])
+        findings_table = ('<table><thead><tr><th>Section</th><th>Severity</th><th>Finding</th></tr></thead>'
+                          f'<tbody>{findings}</tbody></table>')
+    else:
+        findings_table = ('<p class="muted">Nothing flagged. Import your LinkedIn data export to audit '
+                          'your real headline, About and experience.</p>')
+
+    demand = ", ".join(esc(s) for s in audit["demand_skills"][:12]) or "none measured yet"
+    section_options = "".join(f'<option value="{s}">{s}</option>' for s in PROFILE_SECTIONS)
+
+    body = f"""
+{banner_from_query(request)}
+<div class="card">
+  <h2>Findings</h2>
+  <p class="muted">{summary['high']} high · {summary['medium']} medium · {summary['low']} low ·
+     {summary['info']} info</p>
+  {findings_table}
+  <p class="muted">{esc(audit['note'])}</p>
+</div>
+<div class="card">
+  <h2>What your target jobs keep asking for</h2>
+  <p>{demand}</p>
+</div>
+<div class="card">
+  <h2>Propose an edit</h2>
+  <p class="muted">This queues a draft. Nothing changes on LinkedIn: you approve it on
+     <a href="/review">Review</a>, then paste it yourself.</p>
+  <form method="post" action="/profile/propose">
+    <select name="section">{section_options}</select>
+    <textarea name="text" rows="6" placeholder="the new text" required></textarea>
+    <input type="text" name="rationale" placeholder="why this change" required>
+    <button type="submit" class="btn">Queue draft for review</button>
+  </form>
+</div>
+"""
+    return layout(request, title="Profile audit", active="/profile", body=body)
+
+
+async def profile_propose(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    form = await request.form()
+    try:
+        draft = cp.propose_profile_edit(str(form.get("section", "")), str(form.get("text", "")),
+                                        str(form.get("rationale", "")))
+    except CopilotError as exc:
+        return error_redirect("/profile", str(exc))
+    return RedirectResponse(f"/review/{draft['draft_id']}", status_code=303)
+
+
+# ---------------------------------------------------------------------------- Network
+
+def network(request: Request) -> HTMLResponse:
+    cp: Copilot = request.app.state.cp
+    jobs = [j for j in cp.list_jobs(None, None, 100)["jobs"] if j["company"]]
+    raw = request.query_params.get("job_id")
+    try:
+        job_id = int(raw) if raw else (jobs[0]["id"] if jobs else None)
+    except ValueError:
+        job_id = jobs[0]["id"] if jobs else None
+
+    if job_id is None:
+        body = (f'{banner_from_query(request)}<div class="card"><p class="muted">No stored job has a company '
+                'name yet, so there is nothing to look for referrals against.</p></div>')
+        return layout(request, title="Network", active="/network", body=body)
+
+    picker = "".join(
+        f'<option value="{j["id"]}"{" selected" if j["id"] == job_id else ""}>'
+        f'{esc(j["title"])} — {esc(j["company"])}</option>' for j in jobs
+    )
+    try:
+        result = cp.find_referrals(job_id)
+    except CopilotError as exc:
+        body = (f'{banner_from_query(request)}<div class="banner bad">{esc(str(exc))}</div>'
+                f'<div class="card"><form method="get" action="/network">'
+                f'<select name="job_id" data-autosubmit>{picker}</select></form></div>')
+        return layout(request, title="Network", active="/network", body=body)
+
+    if result["connections"]:
+        rows = "".join(f"""<tr>
+  <td><strong>{esc(c['name'])}</strong><div class="muted">{esc(c['position'])}</div></td>
+  <td class="muted">{esc(c['company'])}</td>
+  <td class="muted">connected {esc(c['connected_on'])}</td>
+  <td>
+    <form method="post" action="/network/outreach">
+      <input type="hidden" name="job_id" value="{job_id}">
+      <input type="hidden" name="recipient" value="{esc(c['name'])}">
+      <select name="channel">
+        <option value="message">message</option>
+        <option value="connection_note">connection note</option>
+      </select>
+      <textarea name="text" rows="3" placeholder="what you would say" required></textarea>
+      <input type="text" name="rationale" placeholder="why them" required>
+      <button type="submit" class="btn secondary">Queue draft</button>
+    </form>
+  </td>
+</tr>""" for c in result["connections"])
+        table = ('<table><thead><tr><th>Who</th><th>Company</th><th>Since</th><th>Ask for an intro</th>'
+                 f'</tr></thead><tbody>{rows}</tbody></table>')
+    else:
+        table = f'<p class="muted">{esc(result.get("note") or result.get("tip") or "No matches.")}</p>'
+
+    body = f"""
+{banner_from_query(request)}
+<div class="card">
+  <form method="get" action="/network">
+    <label>Referrals at <select name="job_id" data-autosubmit>{picker}</select></label>
+  </form>
+  <p class="muted">First-degree connections from your LinkedIn data export at
+     <strong>{esc(result['company'])}</strong>. Drafts queue for review; nothing is sent.</p>
+  {table}
+</div>
+"""
+    return layout(request, title="Network", active="/network", body=body)
+
+
+async def network_outreach(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    form = await request.form()
+    raw_job = form.get("job_id")
+    try:
+        job_id = int(str(raw_job)) if raw_job else None
+    except ValueError:
+        job_id = None
+    try:
+        draft = cp.draft_outreach(str(form.get("recipient", "")), str(form.get("text", "")),
+                                  str(form.get("rationale", "")), str(form.get("channel", "message")),
+                                  job_id)
+    except CopilotError as exc:
+        return error_redirect("/network", str(exc))
+    return RedirectResponse(f"/review/{draft['draft_id']}", status_code=303)
+
+
+# ---------------------------------------------------------------------------- News
+
+def news_screen(request: Request) -> HTMLResponse:
+    cp: Copilot = request.app.state.cp
+    digest = cp.news_digest()
+    if digest["items"]:
+        cards = "".join(f"""<div class="card">
+  <strong>{esc(item['title'])}</strong>
+  <div class="muted">{esc(item['feed'])} · {esc(_age(item['published']))} · score {item['score']:.2f}</div>
+  {''.join(f'<span class="chip">{esc(m)}</span>' for m in item['matched_interests'][:6])}
+  {''.join(f'<div class="banner bad">flag: {esc(f["type"])}</div>' for f in item.get('flags', []))}
+  <div class="external"><span class="src">summary, from {esc(item['feed'])}</span>{esc(item['summary'])}</div>
+  <form method="post" action="/news/post">
+    <textarea name="text" rows="4" placeholder="your own take — not a summary of the article" required></textarea>
+    <input type="text" name="rationale" placeholder="why post this" required>
+    <button type="submit" class="btn secondary">Queue post for review</button>
+  </form>
+</div>""" for item in digest["items"])
+    else:
+        cards = ('<p class="muted">Nothing in the last {days} days. Use Refresh to pull your configured '
+                 'feeds.</p>').format(days=digest["days"])
+
+    body = f"""
+{banner_from_query(request)}
+<div class="card">
+  <form method="post" action="/news/refresh">
+    <button type="submit" class="btn">Refresh feeds</button>
+  </form>
+  <p class="muted">{esc(digest['tip'])}</p>
+</div>
+<div class="grid">{cards}</div>
+"""
+    return layout(request, title="News", active="/news", body=body)
+
+
+async def news_refresh(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    try:
+        result = cp.refresh_news()
+    except CopilotError as exc:
+        return error_redirect("/news", str(exc))
+    failed = [f"{f['feed']}: {f['error']}" for f in result["feeds"] if f.get("error")]
+    added = sum(f.get("new", 0) for f in result["feeds"])
+    if failed:
+        return error_redirect("/news", "; ".join(failed)[:300])
+    return RedirectResponse(f"/news?ok={added}+new+item(s)", status_code=303)
+
+
+async def news_post(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    form = await request.form()
+    try:
+        draft = cp.draft_post(str(form.get("text", "")), str(form.get("rationale", "")))
+    except CopilotError as exc:
+        return error_redirect("/news", str(exc))
+    return RedirectResponse(f"/review/{draft['draft_id']}", status_code=303)
+
+
 def create_app(cp: Copilot, port: int) -> Starlette:
     # TrustedHostMiddleware compares only the hostname (it strips the port itself), so these are bare.
     allowed_hosts = ["127.0.0.1", "localhost"]
@@ -1014,6 +1351,16 @@ def create_app(cp: Copilot, port: int) -> Starlette:
         Route("/jobs/{job_id:int}/status", job_update_status, methods=["POST"]),
         Route("/inbox", inbox_list),
         Route("/inbox/{item_id:int}/status", inbox_update_status, methods=["POST"]),
+        Route("/path", career_path),
+        Route("/path/courses", course_add, methods=["POST"]),
+        Route("/path/courses/{course_id:int}", course_update, methods=["POST"]),
+        Route("/profile", profile_audit_screen),
+        Route("/profile/propose", profile_propose, methods=["POST"]),
+        Route("/network", network),
+        Route("/network/outreach", network_outreach, methods=["POST"]),
+        Route("/news", news_screen),
+        Route("/news/refresh", news_refresh, methods=["POST"]),
+        Route("/news/post", news_post, methods=["POST"]),
         Route("/data", data_privacy),
         Route("/data/purge", data_purge, methods=["POST"]),
     ]

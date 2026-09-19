@@ -5,10 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-19
 
 ### Added
 
+- **Four more Console screens.** Career path, Profile audit, Network and News were reachable only
+  through Claude or a terminal; they are now in the Console alongside Today, Review, Jobs, Inbox and
+  Data & privacy. Career path shows the skills blocking your targets, the time-boxed plan and the
+  courses you track (with add and progress-update forms); Profile audit shows findings by severity and
+  what your target jobs keep asking for; Network finds first-degree connections at a job's company;
+  News ranks your configured feeds and can refresh them.
+- Every action on the new screens **queues a pending draft and never approves one** — approval stays on
+  Review, where the per-number and per-link confirmations and the flag acknowledgement live. A test
+  asserts all three drafting actions leave exactly three pending drafts and nothing approved or executed.
+- The empty states are the states a new install is actually in, so each is handled: no job descriptions
+  yet points at `career-copilot fetch-descriptions`; no connections imported explains the LinkedIn data
+  export; a job with no company renders the error as a banner rather than a traceback; no feeds
+  configured reports which feed failed and why.
 - **UK sponsor-licence check.** For UK-located jobs, `check_sponsor_licence` and the Console's job
   page say whether the employer appears on the Home Office Register of Licensed Sponsors. You
   import the register yourself: download the CSV from gov.uk, put it in the imports folder, and run
@@ -152,5 +165,6 @@ without LinkedIn credentials, scraping, or any automated sending.
   export handling, learning plans, news, the MCP tool surface over the protocol, and a real
   stdio server end to end.
 
+[0.3.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.3.0
 [0.2.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.2.0
 [0.1.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.1.0
