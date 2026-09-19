@@ -25,14 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Course status and progress are submitted separately on purpose: `update_course` only applies its
   "100% means completed" rule when no status accompanies the progress, so sending both would have
   silently contradicted what the page tells you.
-
-### Fixed
-
-- `manifest.json` declared 34 tools while the server exposed 36, so `test_manifest.py` failed on
-  `main`. PR #7 added the manifest and the test that pins it to the live tool surface; PR #8 added
-  `check_sponsor_licence` and `import_sponsor_register`. Each was green alone and the pair was not —
-  both tools are now declared.
-
 - **UK sponsor-licence check.** For UK-located jobs, `check_sponsor_licence` and the Console's job
   page say whether the employer appears on the Home Office Register of Licensed Sponsors. You
   import the register yourself: download the CSV from gov.uk, put it in the imports folder, and run

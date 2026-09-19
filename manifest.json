@@ -59,7 +59,7 @@
     },
     {
       "name": "check_sponsor_licence",
-      "description": "For a UK-located job, whether the employer appears on the Home Office Register of Licensed Sponsors. Company-level only: a licence does not mean this role will be sponsored."
+      "description": "Whether a UK job's employer appears on the Home Office Register of Licensed Sponsors."
     },
     {
       "name": "draft_application",
@@ -127,7 +127,7 @@
     },
     {
       "name": "import_sponsor_register",
-      "description": "Import the UK Register of Licensed Sponsors CSV the user downloaded from gov.uk and placed in the imports folder. Nothing downloads it automatically."
+      "description": "Import the UK Register of Licensed Sponsors CSV, downloaded by the user from gov.uk."
     },
     {
       "name": "ingest_email",
