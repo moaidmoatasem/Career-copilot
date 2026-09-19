@@ -58,6 +58,10 @@
       "description": "Time-boxed learning plan from the skill gaps, with a proof-of-skill idea per step and how many jobs would move up a tier if the user closed each gap."
     },
     {
+      "name": "check_sponsor_licence",
+      "description": "For a UK-located job, whether the employer appears on the Home Office Register of Licensed Sponsors. Company-level only: a licence does not mean this role will be sponsored."
+    },
+    {
       "name": "draft_application",
       "description": "Queue an application note or cover message for a job, for approval."
     },
@@ -120,6 +124,10 @@
     {
       "name": "import_linkedin_export",
       "description": "Import LinkedIn's official data export ZIP (Settings → Data privacy → Get a copy of your data)."
+    },
+    {
+      "name": "import_sponsor_register",
+      "description": "Import the UK Register of Licensed Sponsors CSV the user downloaded from gov.uk and placed in the imports folder. Nothing downloads it automatically."
     },
     {
       "name": "ingest_email",
