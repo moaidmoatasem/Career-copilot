@@ -1,6 +1,6 @@
 [project]
 name = "career-copilot-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first, human-in-the-loop MCP server for a LinkedIn-centred job search. No scraping, no LinkedIn credentials."
 readme = "README.md"
 license = "MIT"

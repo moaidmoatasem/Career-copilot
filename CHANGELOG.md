@@ -5,10 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-19
 
 ### Added
 
+- **Three more Console screens.** Profile audit, Network and News were reachable only through Claude or
+  a terminal. Profile audit lists findings by severity and what your target jobs keep asking for; Network
+  finds first-degree connections at a job's company and can draft the ask; News ranks your configured
+  feeds, refreshes them, and drafts a post. Career path arrived separately in the same release.
+- Every action on these screens **queues a pending draft and never approves one** — approval stays on
+  Review, where the per-number and per-link confirmations and the flag acknowledgement live. A test
+  drives all three drafting actions and asserts exactly three pending drafts, nothing approved or
+  executed.
+- Their empty states are the states a new install is actually in: no connections imported explains the
+  LinkedIn data export; a job with no company renders the error as a banner rather than a traceback; a
+  feed that fails names the feed and the error.
 - **The Console reaches two features that already existed.** `fetch_job_description` and
   `find_referrals` shipped working, were exposed to Claude, and had no button anywhere — the only
   way to use either was to ask. The job page now offers both: a **Fetch** button (shown only when
@@ -168,5 +179,6 @@ without LinkedIn credentials, scraping, or any automated sending.
   export handling, learning plans, news, the MCP tool surface over the protocol, and a real
   stdio server end to end.
 
+[0.3.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.3.0
 [0.2.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.2.0
 [0.1.0]: https://github.com/moaidmoatasem/Career-copilot/releases/tag/v0.1.0

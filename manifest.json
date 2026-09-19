@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "career-copilot",
   "display_name": "Career Copilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Runs your LinkedIn-centred job search with you — without logging into LinkedIn, scraping it, or sending anything on its own.",
   "long_description": "Career Copilot tiers job-alert emails into matched / promising / close, plans the skills blocking your targets, triages recruiter messages and flags scams, audits your LinkedIn profile against its character limits, and ranks industry news. Every message, post, application and profile edit stays a draft until you approve it yourself, in a browser page or a terminal, and carry it out on LinkedIn by hand. It never asks for your LinkedIn password or session cookie, and nothing it does touches LinkedIn's servers. All of your data stays on this machine.",
   "author": {
