@@ -72,12 +72,12 @@ def check_data_dir(home: Path) -> list[Check]:
     if not home.exists():
         return [Check(FAIL, "Data folder", f"{home} does not exist — run `career-copilot init`")]
     out = [Check(OK, "Data folder", str(home))]
-    if _posix():
-        mode = _mode(home)
-        out.append(
-            Check(OK if mode == 0o700 else WARN, "Data folder permissions",
-                  f"{oct(mode)}" + ("" if mode == 0o700 else " — expected 0o700; others can read your job search"))
-        )
+    # Always check folder permissions (works on Windows and POSIX)
+    mode = _mode(home)
+    out.append(
+        Check(OK if mode == 0o700 else WARN, "Data folder permissions",
+              f"{oct(mode)}" + ("" if mode == 0o700 else " — expected 0o700; others can read your job search"))
+    )
     imports = home / "imports"
     out.append(
         Check(OK if imports.is_dir() else WARN, "Imports folder",
