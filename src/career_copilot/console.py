@@ -161,6 +161,7 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 .chip.tier-promising { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 .chip.tier-close { border-color: var(--muted); }
 .chip.tier-low_fit, .chip.tier-excluded { color: var(--muted); }
+.chip.bad { border-color: var(--bad); color: var(--bad); }
 .external { background: var(--external-bg); border-left: 3px solid var(--external-rule); border-radius: 0 6px 6px 0;
   padding: 10px 12px; white-space: pre-wrap; word-break: break-word; }
 .external .src { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
@@ -1297,8 +1298,6 @@ async def static_js(request: Request) -> Response:
     return Response(JS, media_type="application/javascript")
 
 
-# ---------------------------------------------------------------------------- app factory
-
 # ---------------------------------------------------------------------------- Profile audit
 
 PROFILE_SECTIONS = ("headline", "about", "skills")
@@ -1342,10 +1341,10 @@ def profile_audit_screen(request: Request) -> HTMLResponse:
   <p class="muted">This queues a draft. Nothing changes on LinkedIn: you approve it on
      <a href="/review">Review</a>, then paste it yourself.</p>
   <form method="post" action="/profile/propose">
-    <select name="section">{section_options}</select>
-    <textarea name="text" rows="6" placeholder="the new text" required></textarea>
-    <input type="text" name="rationale" placeholder="why this change" required>
-    <button type="submit" class="btn">Queue draft for review</button>
+    <label>Section</label><select name="section">{section_options}</select>
+    <label>New text</label><textarea name="text" rows="6" required></textarea>
+    <label>Why this change</label><input type="text" name="rationale" required>
+    <button type="submit" class="btn" style="margin-top:10px">Queue draft for review</button>
   </form>
 </div>
 """
@@ -1503,6 +1502,8 @@ async def news_post(request: Request) -> Response:
         return error_redirect("/news", str(exc))
     return RedirectResponse(f"/review/{draft['draft_id']}", status_code=303)
 
+
+# ---------------------------------------------------------------------------- app factory
 
 def create_app(cp: Copilot, port: int) -> Starlette:
     # TrustedHostMiddleware compares only the hostname (it strips the port itself), so these are bare.
