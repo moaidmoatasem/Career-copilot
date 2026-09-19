@@ -108,6 +108,7 @@ def test_healthy_database_passes_every_check(healthy):
     assert only(checks, "append-only").status == doctor.OK
 
 
+@pytest.mark.skipif(os.name != "posix", reason="file permission checks are only enforced on POSIX (not Windows)")
 def test_world_readable_database_is_a_failure(healthy):
     os.chmod(healthy / "copilot.db", 0o644)
     assert only(doctor.check_database(healthy), "Database permissions").status == doctor.FAIL
@@ -192,6 +193,7 @@ def test_gmail_not_connected_warns_but_does_not_fail(healthy):
     assert not any(c.failed for c in checks)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="file permission checks are only enforced on POSIX (not Windows)")
 def test_readable_gmail_token_is_a_failure(healthy):
     token = healthy / "gmail-token.json"
     token.write_text(json.dumps({"scopes": [doctor.gmail.SCOPE]}), encoding="utf-8")
@@ -339,6 +341,7 @@ def test_cli_exits_zero_when_healthy(healthy, capsys):
     assert "failure(s)" in capsys.readouterr().out
 
 
+@pytest.mark.skipif(os.name != "posix", reason="file permission checks are only enforced on POSIX (not Windows)")
 def test_cli_exits_one_when_something_failed(healthy, capsys):
     from career_copilot import cli
 

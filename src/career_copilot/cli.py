@@ -17,6 +17,14 @@ from . import boards, doctor as doctor_mod, gmail
 from .config import home_dir, profile_file, template_text
 from .service import Copilot, CopilotError
 
+if sys.platform == "win32":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 _TTY = sys.stdout.isatty()
 
 
