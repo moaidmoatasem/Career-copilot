@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import boards, drafts, emails, export, geo, gmail, learning, news, profile_audit, sponsors
-from .config import LIMITS, ConfigError, Profile, home_dir, load_profile, profile_file
+from .config import LIMITS, ConfigError, Profile, home_dir, load_profile, profile_file, profile_to_toml
 from .safety import clean_text, prepare_untrusted
 from .scoring import score_job
 from .store import Store
-from .util import companies_match, company_tokens, sha256, sha256_file, short_hash, strip_query, utcnow
+from .util import companies_match, company_tokens, restrict_file, sha256, sha256_file, short_hash, strip_query, utcnow
 
 JOB_STATUSES = ("new", "shortlisted", "applying", "applied", "interviewing", "offer", "rejected", "archived")
 ACTIVE_TIERS = ("matched", "promising", "close")
@@ -99,6 +100,34 @@ class Copilot:
             )
             if rows:
                 self.store.audit("system", "jobs.rescore", "", {"jobs": len(rows), "reason": "profile changed"}, conn=conn)
+
+    def update_profile(self, new_profile: Profile, changed_fields: list[str]) -> None:
+        """Validate and atomically write profile.toml. Never leaves a broken file on disk.
+
+        Written to a temp file, parsed back through the real load_profile() (so it fails the
+        same way a hand edit would, before anything is touched), then swapped in with an atomic
+        replace. The previous file is kept as profile.toml.bak, since saving here drops any
+        comments the file had. Only field *names* are audited, never the values: profile content
+        otherwise never leaves the local database in raw form.
+        """
+        text = profile_to_toml(new_profile)
+        tmp = self.profile_path.with_name(self.profile_path.name + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        restrict_file(tmp, 0o600)
+        try:
+            load_profile(tmp)
+        except ConfigError as exc:
+            tmp.unlink(missing_ok=True)
+            raise CopilotError(f"profile.toml problem: {exc}") from exc
+
+        if self.profile_path.exists():
+            backup = self.profile_path.with_name(self.profile_path.name + ".bak")
+            backup.write_text(self.profile_path.read_text(encoding="utf-8"), encoding="utf-8")
+            restrict_file(backup, 0o600)
+
+        os.replace(tmp, self.profile_path)
+        restrict_file(self.profile_path, 0o600)
+        self.store.audit("human", "settings.profile_update", "", {"fields": sorted(changed_fields)})
 
     # ------------------------------------------------------------------ helpers
     def _job(self, job_id: int) -> dict:

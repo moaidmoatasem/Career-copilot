@@ -24,6 +24,7 @@ Security posture (see README "Security model"):
 
 from __future__ import annotations
 
+import dataclasses
 import html
 import json
 import secrets
@@ -44,6 +45,7 @@ from starlette.responses import HTMLResponse, PlainTextResponse, RedirectRespons
 from starlette.routing import Route
 
 from . import boards, pin
+from .config import SENIORITY_RANK
 from .service import (
     ACTIVE_TIERS, ALL_TIERS, COURSE_STATUSES, INBOX_STATUSES, JOB_STATUSES, Copilot, CopilotError,
 )
@@ -65,6 +67,7 @@ NAV_ITEMS = [
     ("/network", "Network"),
     ("/news", "News"),
     ("/activity", "Activity"),
+    ("/settings", "Settings"),
     ("/data", "Data & privacy"),
 ]
 
@@ -1218,6 +1221,137 @@ def _pin_card(pin_set: bool) -> str:
 </div>"""
 
 
+# ---------------------------------------------------------------------------- Settings
+
+# Every Profile field except `configured` (derived, not a setting) and the two that need
+# add/remove-row UI this screen doesn't have yet (`skill_aliases`, `feeds`) — those still
+# round-trip through every save unedited.
+_SETTINGS_TEXT_FIELDS = ("name", "linkedin_url")
+_SETTINGS_LIST_FIELDS = (
+    "target_titles", "target_locations", "exclude_title_keywords", "skills_have", "skills_learning", "interests",
+)
+_SETTINGS_BOOL_FIELDS = ("premium", "remote_ok")
+# (low, high) match the bounds load_profile() itself enforces — shown here only as a UX hint;
+# load_profile() run inside cp.update_profile() is still what actually decides.
+_SETTINGS_INT_BOUNDS = {
+    "tier_matched": (1, 100), "tier_promising": (1, 100), "tier_close": (0, 100),
+    "hours_per_week": (1, 60), "retention_days": (7, 3650),
+}
+
+
+def _lines(values: list[str]) -> str:
+    return esc("\n".join(values))
+
+
+def settings_screen(request: Request) -> HTMLResponse:
+    cp: Copilot = request.app.state.cp
+    profile = cp.profile
+    seniority_options = "".join(
+        f'<option value="{s}"{" selected" if s == profile.seniority else ""}>{s}</option>' for s in SENIORITY_RANK
+    )
+    acceptable_options = "".join(
+        f'<option value="{s}"{" selected" if s in profile.acceptable_seniority else ""}>{s}</option>'
+        for s in SENIORITY_RANK
+    )
+    hints = ""
+    if len(profile.skills_have) < 3:
+        hints += (f'<p class="muted">{len(profile.skills_have)} skill(s) listed — scoring works best '
+                  f'with 3 or more.</p>')
+    if not profile.target_titles:
+        hints += '<p class="text-bad">No target titles set — nothing can be scored against this profile.</p>'
+
+    body = f"""
+{banner_from_query(request)}
+<p class="banner warn">Saving here rewrites <code>profile.toml</code>. Any comments in it — the template's
+   or your own — are not kept; the version before this save is copied to <code>profile.toml.bak</code> first.</p>
+<form method="post" action="/settings/save">
+<div class="card">
+  <h2>Candidate</h2>
+  <label>Name</label><input type="text" name="name" value="{esc(profile.name)}">
+  <label>LinkedIn URL</label><input type="text" name="linkedin_url" value="{esc(profile.linkedin_url)}">
+  <label>Seniority</label><select name="seniority">{seniority_options}</select>
+  <label>Acceptable seniority levels (also count as a full fit)</label>
+  <select name="acceptable_seniority" multiple size="{len(SENIORITY_RANK)}">{acceptable_options}</select>
+  <ul class="check-list"><li><label><input type="checkbox" name="premium"{" checked" if profile.premium else ""}>
+    LinkedIn Premium — raises the connection-note limit to 300</label></li></ul>
+</div>
+<div class="card">
+  <h2>Targets</h2>
+  <label>Titles (one per line)</label><textarea name="target_titles">{_lines(profile.target_titles)}</textarea>
+  <label>Locations (one per line)</label><textarea name="target_locations">{_lines(profile.target_locations)}</textarea>
+  <label>Exclude titles containing (one per line)</label>
+  <textarea name="exclude_title_keywords">{_lines(profile.exclude_title_keywords)}</textarea>
+  <ul class="check-list"><li><label><input type="checkbox" name="remote_ok"{" checked" if profile.remote_ok else ""}>
+    Remote roles count as being in a target location</label></li></ul>
+</div>
+<div class="card">
+  <h2>Skills</h2>
+  <label>Skills you have (one per line)</label><textarea name="skills_have">{_lines(profile.skills_have)}</textarea>
+  <label>Skills you're learning — half credit while learning (one per line)</label>
+  <textarea name="skills_learning">{_lines(profile.skills_learning)}</textarea>
+  {hints}
+  <p class="muted">Skill aliases (<code>[skills.aliases]</code>) aren't editable here yet — edit
+     <code>profile.toml</code> directly for those.</p>
+</div>
+<div class="card">
+  <h2>Tiers</h2>
+  <p class="muted">Each threshold must be lower than the one above it.</p>
+  <label>Matched — apply now</label>
+  <input type="number" name="tier_matched" min="1" max="100" value="{profile.tier_matched}">
+  <label>Promising — worth tailoring for</label>
+  <input type="number" name="tier_promising" min="1" max="100" value="{profile.tier_promising}">
+  <label>Close — reachable after closing specific skill gaps</label>
+  <input type="number" name="tier_close" min="0" max="100" value="{profile.tier_close}">
+</div>
+<div class="card">
+  <h2>Career path &amp; privacy</h2>
+  <label>Hours per week for learning</label>
+  <input type="number" name="hours_per_week" min="1" max="60" value="{profile.hours_per_week}">
+  <label>Retention for inbox previews and news (days)</label>
+  <input type="number" name="retention_days" min="7" max="3650" value="{profile.retention_days}">
+</div>
+<div class="card">
+  <h2>News</h2>
+  <label>Interests (one per line)</label><textarea name="interests">{_lines(profile.interests)}</textarea>
+  <p class="muted">Feeds (<code>[[news.feeds]]</code>) aren't editable here yet — edit
+     <code>profile.toml</code> directly, or ask Claude to add one.</p>
+</div>
+<button type="submit" class="btn mt">Save</button>
+</form>
+"""
+    return layout(request, title="Settings", active="/settings", body=body)
+
+
+async def settings_save(request: Request) -> Response:
+    cp: Copilot = request.app.state.cp
+    form = await request.form()
+
+    updates: dict[str, Any] = {}
+    for field_name in _SETTINGS_TEXT_FIELDS:
+        updates[field_name] = str(form.get(field_name, "")).strip()
+    for field_name in _SETTINGS_LIST_FIELDS:
+        updates[field_name] = [line.strip() for line in str(form.get(field_name, "")).splitlines() if line.strip()]
+    for field_name in _SETTINGS_BOOL_FIELDS:
+        updates[field_name] = field_name in form
+    for field_name in _SETTINGS_INT_BOUNDS:
+        raw = str(form.get(field_name, "")).strip()
+        try:
+            updates[field_name] = int(raw)
+        except ValueError:
+            return error_redirect("/settings", f"{field_name.replace('_', ' ')} must be a whole number")
+    updates["seniority"] = str(form.get("seniority", "")).strip().lower()
+    updates["acceptable_seniority"] = [s.strip().lower() for s in form.getlist("acceptable_seniority")]
+
+    current = cp.profile  # reload profile.toml (and rescore) if it changed, so we diff against what's really there
+    changed = [field_name for field_name, value in updates.items() if getattr(current, field_name) != value]
+    new_profile = dataclasses.replace(current, **updates)
+    try:
+        cp.update_profile(new_profile, changed)
+    except CopilotError as exc:
+        return error_redirect("/settings", str(exc))
+    return RedirectResponse("/settings?ok=Saved", status_code=303)
+
+
 def data_privacy(request: Request) -> HTMLResponse:
     cp: Copilot = request.app.state.cp
     status = cp.status()
@@ -1235,8 +1369,8 @@ def data_privacy(request: Request) -> HTMLResponse:
   <h2>Where your data lives</h2>
   <p>Profile: <code>{esc(status['profile_file'])}</code></p>
   <p>Imports: <code>{esc(status['imports_folder'])}</code></p>
-  <p>Retention for inbox previews and news: {status['retention_days']} days — change it in
-     <code>profile.toml</code> (editing it here is planned for a later phase).</p>
+  <p>Retention for inbox previews and news: {status['retention_days']} days —
+     <a href="/settings">change it in Settings</a>.</p>
 </div>
 <div class="card">
   <h2>What leaves this machine</h2>
@@ -1705,6 +1839,8 @@ def create_app(cp: Copilot, port: int) -> Starlette:
         Route("/news", news_screen),
         Route("/news/refresh", news_refresh, methods=["POST"]),
         Route("/news/post", news_post, methods=["POST"]),
+        Route("/settings", settings_screen),
+        Route("/settings/save", settings_save, methods=["POST"]),
         Route("/data", data_privacy),
         Route("/data/purge", data_purge, methods=["POST"]),
     ]

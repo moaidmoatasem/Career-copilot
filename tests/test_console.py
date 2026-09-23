@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import inspect
 import json
+import os
 import time
 from types import SimpleNamespace
 from urllib.parse import unquote_plus
@@ -535,7 +537,7 @@ def test_no_console_page_claims_an_action_on_linkedin(logged_in, cp):
     forbidden = ("we sent", "we posted", "has been sent", "has been posted", "was sent to linkedin",
                  "successfully applied", "applied on your behalf", "message sent")
     for path in ("/", "/review", "/jobs", "/jobs/1", "/career?tab=gaps", "/career?tab=plan",
-                 "/career?tab=courses", "/inbox", "/activity", "/data"):
+                 "/career?tab=courses", "/inbox", "/activity", "/settings", "/data"):
         text = logged_in.get(path).text.lower()
         for phrase in forbidden:
             assert phrase not in text, f"{path} contains {phrase!r}"
@@ -927,3 +929,110 @@ def test_data_page_says_whether_a_pin_is_set(logged_in, cp):
     pin.set_pin(cp.store, GOOD_PIN)
     r = logged_in.get("/data")
     assert "Approval PIN" in r.text and "Not set." not in r.text
+
+
+# ---------------------------------------------------------------------------- Settings (profile.toml)
+
+_VALID_SETTINGS = {
+    "name": "Test User", "linkedin_url": "https://www.linkedin.com/in/test-user", "seniority": "senior",
+    "acceptable_seniority": ["senior", "lead"], "target_titles": "Senior QA Engineer",
+    "target_locations": "United Arab Emirates", "exclude_title_keywords": "intern",
+    "skills_have": "python\nplaywright\napi testing", "skills_learning": "llm",
+    "tier_matched": "75", "tier_promising": "55", "tier_close": "35",
+    "hours_per_week": "6", "retention_days": "90", "interests": "playwright",
+}
+
+
+def test_settings_get_renders_current_values(logged_in):
+    r = logged_in.get("/settings")
+    assert r.status_code == 200
+    assert "Test User" in r.text
+    assert 'value="75"' in r.text  # tier_matched from the fixture profile
+
+
+def test_settings_get_shows_a_low_skill_count_hint(logged_in, cp):
+    cp.update_profile(dataclasses.replace(cp.profile, skills_have=["python"]), ["skills_have"])
+    r = logged_in.get("/settings")
+    assert "scoring works best" in r.text
+
+
+def test_settings_get_shows_no_target_titles_warning(logged_in, cp):
+    cp.update_profile(dataclasses.replace(cp.profile, target_titles=[]), ["target_titles"])
+    r = logged_in.get("/settings")
+    assert "no target titles set" in r.text.lower()
+
+
+def test_settings_save_valid_change_updates_file_and_reloads(logged_in, cp, home):
+    form = {**_VALID_SETTINGS, "target_titles": "QA Lead\nSDET Lead", "tier_matched": "80"}
+    r = logged_in.post("/settings/save", data=form, follow_redirects=False)
+    assert r.status_code == 303 and "ok=Saved" in r.headers["location"]
+    assert cp.profile.target_titles == ["QA Lead", "SDET Lead"]
+    assert cp.profile.tier_matched == 80
+    assert "QA Lead" in (home / "profile.toml").read_text()
+
+
+def test_settings_save_preserves_untouched_feeds_and_aliases(logged_in, cp):
+    before_feeds, before_aliases = cp.profile.feeds, cp.profile.skill_aliases
+    assert before_feeds  # the fixture profile has one
+    r = logged_in.post("/settings/save", data={**_VALID_SETTINGS, "name": "Someone Else"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert cp.profile.feeds == before_feeds
+    assert cp.profile.skill_aliases == before_aliases
+
+
+def test_settings_save_rejects_unknown_seniority_and_leaves_the_file_untouched(logged_in, home):
+    before = (home / "profile.toml").read_text()
+    r = logged_in.post("/settings/save", data={**_VALID_SETTINGS, "seniority": "wizard"}, follow_redirects=False)
+    assert "error=" in r.headers["location"]
+    assert (home / "profile.toml").read_text() == before
+    assert not (home / "profile.toml.bak").exists()
+
+
+def test_settings_save_rejects_bad_tier_order(logged_in, home):
+    before = (home / "profile.toml").read_text()
+    r = logged_in.post("/settings/save", data={**_VALID_SETTINGS, "tier_close": "90"}, follow_redirects=False)
+    assert "error=" in r.headers["location"]
+    assert "matched" in unquote_plus(r.headers["location"]) and "promising" in unquote_plus(r.headers["location"])
+    assert (home / "profile.toml").read_text() == before
+
+
+def test_settings_save_rejects_a_non_integer_tier(logged_in, home):
+    before = (home / "profile.toml").read_text()
+    r = logged_in.post("/settings/save", data={**_VALID_SETTINGS, "tier_matched": "not-a-number"},
+                       follow_redirects=False)
+    assert "must be a whole number" in unquote_plus(r.headers["location"])
+    assert (home / "profile.toml").read_text() == before
+
+
+def test_settings_save_writes_a_backup_of_the_previous_file(logged_in, home):
+    before = (home / "profile.toml").read_text()
+    logged_in.post("/settings/save", data={**_VALID_SETTINGS, "name": "New Name"}, follow_redirects=False)
+    assert (home / "profile.toml.bak").read_text() == before
+
+
+@pytest.mark.skipif(os.name != "posix", reason="file permission checks are only enforced on POSIX (not Windows)")
+def test_settings_save_keeps_0600_on_success_and_on_rejection(logged_in, home):
+    logged_in.post("/settings/save", data=_VALID_SETTINGS, follow_redirects=False)
+    assert (home / "profile.toml").stat().st_mode & 0o777 == 0o600
+
+    before_mode = (home / "profile.toml").stat().st_mode & 0o777
+    logged_in.post("/settings/save", data={**_VALID_SETTINGS, "seniority": "wizard"}, follow_redirects=False)
+    assert (home / "profile.toml").stat().st_mode & 0o777 == before_mode
+
+
+def test_settings_save_escapes_a_value_on_redisplay(logged_in):
+    hostile = "<script>alert(1)</script>"
+    logged_in.post("/settings/save", data={**_VALID_SETTINGS, "name": hostile}, follow_redirects=False)
+    r = logged_in.get("/settings")
+    assert hostile not in r.text
+    assert "&lt;script&gt;" in r.text
+
+
+def test_settings_audit_log_names_fields_not_values(logged_in, cp):
+    logged_in.post("/settings/save", data={**_VALID_SETTINGS, "name": "A Very Specific New Name"},
+                   follow_redirects=False)
+    entries = cp.audit_log(20)["entries"]
+    entry = next(e for e in entries if e["action"] == "settings.profile_update")
+    assert entry["actor"] == "human"
+    assert "name" in entry["details"]["fields"]
+    assert "A Very Specific New Name" not in json.dumps(entries)
