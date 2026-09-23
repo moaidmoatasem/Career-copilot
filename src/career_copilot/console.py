@@ -177,6 +177,11 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
 .banner.good { background: color-mix(in srgb, var(--good) 15%, var(--surface)); border: 1px solid var(--good); }
 .check-list { list-style: none; padding: 0; margin: 8px 0; }
 .check-list li { padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.check-list label { display: inline; font-weight: 400; }
+.banner.inline { display: inline; padding: 2px 8px; }
+.text-bad { color: var(--bad); }
+.row.spread { justify-content: space-between; }
+.mt { margin-top: 10px; }
 label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 12.5px; }
 textarea, input[type=text], input[type=password], select {
   width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
@@ -198,6 +203,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .bar-row { display: grid; grid-template-columns: 90px 1fr 48px; align-items: center; gap: 8px; font-size: 12.5px; }
 .bar-track { background: var(--border); border-radius: 6px; height: 10px; overflow: hidden; }
 .bar-fill { background: var(--accent); height: 100%; }
+.w-0 { width: 0%; }
+.w-5 { width: 5%; }
+.w-10 { width: 10%; }
+.w-15 { width: 15%; }
+.w-20 { width: 20%; }
+.w-25 { width: 25%; }
+.w-30 { width: 30%; }
+.w-35 { width: 35%; }
+.w-40 { width: 40%; }
+.w-45 { width: 45%; }
+.w-50 { width: 50%; }
+.w-55 { width: 55%; }
+.w-60 { width: 60%; }
+.w-65 { width: 65%; }
+.w-70 { width: 70%; }
+.w-75 { width: 75%; }
+.w-80 { width: 80%; }
+.w-85 { width: 85%; }
+.w-90 { width: 90%; }
+.w-95 { width: 95%; }
+.w-100 { width: 100%; }
 .help { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); align-items: center; justify-content: center; }
 .help.open { display: flex; }
 .help .card { max-width: 420px; }
@@ -354,7 +380,7 @@ def today(request: Request) -> HTMLResponse:
   </div>
   <div class="card">
     <div class="muted">Jobs by tier</div>
-    <div style="margin-top:8px">{tier_line}</div>
+    <div class="mt">{tier_line}</div>
     <a class="btn secondary" href="/jobs">Go to jobs</a>
   </div>
 </div>
@@ -382,7 +408,7 @@ def _draft_row(d: dict) -> str:
     if checks.get("outbound_links"):
         chips.append(f'<span class="chip">{len(checks["outbound_links"])} link(s)</span>')
     if checks.get("flags"):
-        chips.append('<span class="chip" style="border-color:var(--bad);color:var(--bad)">flag</span>')
+        chips.append('<span class="chip bad">flag</span>')
     target = esc(d["target"] or "—")
     return (f'<tr><td><a href="/review/{d["id"]}">#{d["id"]} · {esc(d["kind"])}</a></td>'
             f'<td>{target}</td><td>{esc(_age(d["created_at"]))}</td><td>{"".join(chips)}</td></tr>')
@@ -421,22 +447,22 @@ def _length_line(checks: dict) -> str:
     limit = checks.get("limit")
     over = limit is not None and checks["chars"] > limit
     return (f'<div class="row">Length: {checks["chars"]}' + (f' / {limit}' if limit else '') +
-            (' <span class="banner bad" style="display:inline;padding:2px 8px">over the limit</span>' if over else '') + '</div>')
+            (' <span class="banner bad inline">over the limit</span>' if over else '') + '</div>')
 
 
 def _checks_html(checks: dict, prefix: str = "") -> str:
     parts = []
     for i, claim in enumerate(checks.get("claims_to_verify", [])):
-        parts.append(f'<li><label style="display:inline;font-weight:400"><input type="checkbox" name="{prefix}claim_{i}" required> '
+        parts.append(f'<li><label><input type="checkbox" name="{prefix}claim_{i}" required> '
                       f'I can trace this number: <strong>{esc(claim)}</strong></label></li>')
     for i, link in enumerate(checks.get("outbound_links", [])):
-        parts.append(f'<li><label style="display:inline;font-weight:400"><input type="checkbox" name="{prefix}link_{i}" required> '
+        parts.append(f'<li><label><input type="checkbox" name="{prefix}link_{i}" required> '
                       f'I confirm this link: <strong>{esc(link)}</strong></label></li>')
     if checks.get("contains_contact_details"):
         parts.append('<li class="muted">Contains an email address or phone number.</li>')
     for flag in checks.get("flags", []):
-        parts.append(f'<li><label style="display:inline;font-weight:400"><input type="checkbox" name="{prefix}flag_ack" required> '
-                      f'<strong style="color:var(--bad)">[{esc(flag["severity"])}] {esc(flag["type"])}</strong>: {esc(flag["excerpt"])}</label></li>')
+        parts.append(f'<li><label><input type="checkbox" name="{prefix}flag_ack" required> '
+                      f'<strong class="text-bad">[{esc(flag["severity"])}] {esc(flag["type"])}</strong>: {esc(flag["excerpt"])}</label></li>')
     return "".join(parts)
 
 
@@ -469,7 +495,7 @@ def review_detail(request: Request) -> Response:
   {checks_html}
   <label>Note (optional)</label><input type="text" name="note">
   {pin_field}
-  <div class="row" style="margin-top:10px">
+  <div class="row mt">
     <button type="submit">Approve (a)</button>
     <a class="btn secondary" data-key-edit href="/review/{draft_id}/edit">Edit (e)</a>
   </div>
@@ -479,7 +505,7 @@ def review_detail(request: Request) -> Response:
   <label>Reason</label>
   <select name="reason" data-key-reject>{"".join(f'<option value="{esc(r)}">{esc(r)}</option>' for r in REJECT_REASONS)}</select>
   <label>Detail (optional)</label><input type="text" name="detail">
-  <button type="submit" class="danger" style="margin-top:10px">Reject (r)</button>
+  <button type="submit" class="danger mt">Reject (r)</button>
 </form>
 """
     elif status == "approved":
@@ -507,7 +533,7 @@ def review_detail(request: Request) -> Response:
     rationale = f'<p class="muted">Why Claude drafted this: {esc(d["rationale"])}</p>' if d.get("rationale") else ""
     body = f"""
 {banner_from_query(request)}
-<div class="row" style="justify-content:space-between">
+<div class="row spread">
   <div><span class="ai-chip">AI-generated</span> <strong>Draft #{draft_id} · {esc(d['kind'])}</strong>
     <span class="muted">target: {esc(d['target'] or '—')} · {esc(_age(d['created_at']))}</span></div>
   <div class="row">{nav_links}</div>
@@ -535,7 +561,7 @@ def review_edit_get(request: Request) -> Response:
 <form method="post" action="/review/{draft_id}/edit" class="card">
   <h2>Edit draft #{draft_id}</h2>
   <textarea name="content" autofocus>{esc(d['content'])}</textarea>
-  <div class="row" style="margin-top:10px">
+  <div class="row mt">
     <button type="submit">Save</button>
     <a class="btn secondary" href="/review/{draft_id}">Cancel</a>
   </div>
@@ -739,8 +765,9 @@ def _bar(label: str, value: float | None) -> str:
     if value is None:
         return ""
     pct = max(0, min(100, round(value * 100)))
+    step = 5 * round(pct / 5)  # the CSP forbids inline styles, so the width is one of the .w-N classes
     return (f'<div class="bar-row"><span>{esc(label)}</span>'
-            f'<div class="bar-track"><div class="bar-fill" style="width:{pct}%"></div></div><span>{pct}%</span></div>')
+            f'<div class="bar-track"><div class="bar-fill w-{step}"></div></div><span>{pct}%</span></div>')
 
 
 def job_detail(request: Request) -> Response:
@@ -753,7 +780,7 @@ def job_detail(request: Request) -> Response:
     breakdown = j["analysis"].get("breakdown", {})
     bars = "".join(_bar(k, breakdown.get(k)) for k in ("skills", "title", "level", "location"))
     matched = "".join(f'<span class="chip">{esc(s)}</span>' for s in j["analysis"].get("matched_skills", []))
-    missing_req = "".join(f'<span class="chip" style="border-color:var(--bad);color:var(--bad)">{esc(s)}</span>'
+    missing_req = "".join(f'<span class="chip bad">{esc(s)}</span>'
                            for s in j["analysis"].get("missing_required", []))
     missing_pref = "".join(f'<span class="chip">{esc(s)}</span>' for s in j["analysis"].get("missing_preferred", []))
     flags = ""
@@ -794,7 +821,7 @@ def job_detail(request: Request) -> Response:
     )
     body = f"""
 {banner_from_query(request)}
-<div class="row" style="justify-content:space-between">
+<div class="row spread">
   <div><strong>{esc(j['title'])}</strong> <span class="muted">@ {esc(j['company'])} · {esc(j['location'])}</span></div>
   <span class="chip tier-{j['tier']}">{esc(j['tier'])} · {j['score'] if j['score'] is not None else '—'} ({esc(j['confidence'])} confidence)</span>
 </div>
@@ -819,7 +846,7 @@ def job_detail(request: Request) -> Response:
   <form method="post" action="/jobs/{job_id}/description">
     <label>Paste or update the full description</label>
     <textarea name="description" placeholder="Paste the job description here to unlock skills-based scoring.">{esc(j['description'])}</textarea>
-    <button type="submit" style="margin-top:10px">Save & rescore</button>
+    <button type="submit" class="mt">Save & rescore</button>
   </form>
 </div>
 <div class="card">
@@ -880,7 +907,7 @@ async def job_update_status(request: Request) -> Response:
 # ---------------------------------------------------------------------------- Inbox
 
 def _inbox_row(item: dict) -> str:
-    flags = ' <span class="chip" style="border-color:var(--bad);color:var(--bad)">flag</span>' if item.get("flags") else ""
+    flags = ' <span class="chip bad">flag</span>' if item.get("flags") else ""
     status_options = "".join(
         f'<option value="{s}"{" selected" if s == item["status"] else ""}>{s}</option>' for s in INBOX_STATUSES
     )
@@ -980,7 +1007,7 @@ def _gaps_tab(cp: Copilot) -> str:
         examples = ", ".join(esc(j) for j in gap.get("example_jobs", [])[:3])
         rows.append(f"""
 <div class="card">
-  <div class="row" style="justify-content:space-between">
+  <div class="row spread">
     <strong>{esc(gap["skill"])}</strong>
     <span class="chip">{esc(gap["status"])} · {gap["jobs"]} job(s)</span>
   </div>
@@ -1058,7 +1085,7 @@ def _courses_tab(cp: Copilot) -> str:
     for c in courses:
         options = "".join(f'<option value="{s}"{" selected" if s == c["status"] else ""}>{s}</option>'
                           for s in COURSE_STATUSES)
-        overdue = (' <span class="chip" style="border-color:var(--bad);color:var(--bad)">overdue</span>'
+        overdue = (' <span class="chip bad">overdue</span>'
                    if c["target_date"] and c["status"] != "completed"
                    and c["target_date"] < datetime.now(timezone.utc).date().isoformat() else "")
         rows.append(f"""
@@ -1094,7 +1121,7 @@ def _courses_tab(cp: Copilot) -> str:
   <label>Provider (optional)</label><input type="text" name="provider">
   <label>URL (optional)</label><input type="text" name="url" placeholder="https://…">
   <label>Target date (optional)</label><input type="text" name="target_date" placeholder="2026-12-31">
-  <button type="submit" style="margin-top:10px">Add course</button>
+  <button type="submit" class="mt">Add course</button>
 </form>"""
 
 
@@ -1200,7 +1227,7 @@ def data_privacy(request: Request) -> HTMLResponse:
   <p class="muted">Type "{esc('DELETE' if what == 'all' else what)}" to confirm — this cannot be undone.</p>
   <input type="hidden" name="what" value="{esc(what)}">
   <input type="text" name="confirm" data-confirm-input autocomplete="off">
-  <button type="submit" class="danger" data-confirm-submit disabled style="margin-top:8px">Delete {esc(what)}</button>
+  <button type="submit" class="danger mt" data-confirm-submit disabled>Delete {esc(what)}</button>
 </form>""" for what in PURGE_CHOICES)
     body = f"""
 {banner_from_query(request)}
@@ -1279,7 +1306,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             _security_headers(response, state.port)
             return response
-        if path.startswith("/static/"):
+        if path.startswith("/static/") or path == "/favicon.ico":
             response = await call_next(request)
             _security_headers(response, state.port)
             return response
@@ -1371,7 +1398,7 @@ def locked(request: Request) -> HTMLResponse:
 <form method="post" action="/unlock" class="card">
   <label>Approval PIN</label>
   <input type="password" name="pin" inputmode="numeric" autocomplete="off" required autofocus>
-  <button type="submit" style="margin-top:10px">Unlock</button>
+  <button type="submit" class="mt">Unlock</button>
 </form>"""
     elif pin_set:
         body = ("<p>This browser has no session to unlock. Run <code>career-copilot console</code> again from "
@@ -1428,6 +1455,11 @@ async def static_js(request: Request) -> Response:
     return Response(JS, media_type="application/javascript")
 
 
+async def favicon(request: Request) -> Response:
+    # Browsers ask for one on every page; answer "nothing here" rather than a 404 in the console.
+    return Response(status_code=204)
+
+
 # ---------------------------------------------------------------------------- Profile audit
 
 PROFILE_SECTIONS = ("headline", "about", "skills")
@@ -1474,7 +1506,7 @@ def profile_audit_screen(request: Request) -> HTMLResponse:
     <label>Section</label><select name="section">{section_options}</select>
     <label>New text</label><textarea name="text" rows="6" required></textarea>
     <label>Why this change</label><input type="text" name="rationale" required>
-    <button type="submit" class="btn" style="margin-top:10px">Queue draft for review</button>
+    <button type="submit" class="btn mt">Queue draft for review</button>
   </form>
 </div>
 """
@@ -1646,6 +1678,7 @@ def create_app(cp: Copilot, port: int) -> Starlette:
         Route("/unlock", unlock, methods=["POST"]),
         Route("/static/app.css", static_css),
         Route("/static/app.js", static_js),
+        Route("/favicon.ico", favicon),
         Route("/review", review_list),
         Route("/review/{draft_id:int}", review_detail),
         Route("/review/{draft_id:int}/edit", review_edit_get, methods=["GET"]),

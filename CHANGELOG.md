@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mismatch — request blocked". The tests never saw it because their client sends no Origin header. The
   policy is now `same-origin`, which still sends nothing to other sites, and a `null` Origin is still
   refused.
+- **Score bars show the score.** The Console's Content-Security-Policy (`style-src 'self'`) makes
+  browsers ignore inline `style=` attributes, and the bars set their width inline, so every fit and
+  capacity bar drew at 100% — a job matching 27% of its skills looked like a perfect match. The same
+  policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
+  review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
+  keeps `style=` out of the Console, and the favicon request no longer logs a 404.
 
 ## [0.3.0] - 2026-09-19
 
