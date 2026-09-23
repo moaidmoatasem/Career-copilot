@@ -280,8 +280,14 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 
 ```bash
 uv run --extra dev pytest        # or: pip install -e ".[dev]" && pytest
+
+# The Console in a real Chromium (skipped above when no browser is installed):
+uv run --extra dev --extra browser playwright install chromium
+uv run --extra dev --extra browser pytest tests/test_console_browser.py
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import (including saved jobs and LinkedIn's sharded CSVs) and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, the approval PIN and idle unlock, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network and news screens. GitHub Actions runs all 335 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import (including saved jobs and LinkedIn's sharded CSVs) and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, the approval PIN and idle unlock, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network and news screens. GitHub Actions runs all 338 tests on Python 3.11 and 3.12 for every push and pull request.
+
+A separate CI job drives the Console in a real Chromium: it clicks every form (approve, edit, reject, revoke, done, the PIN, idle unlock, job and inbox status, courses, the drafting screens, purge) and fails if the browser logs any error or a form POST carries anything but the Console's own Origin. That is what catches what a test client can't see, such as a Content-Security-Policy refusal.
 
 Changes are recorded in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).

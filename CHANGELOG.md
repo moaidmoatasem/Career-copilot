@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limit. Failures, the lockout and each unlock are written to the audit log, never with the PIN in them.
 - The Data & privacy page says whether a PIN is set and how to change it; `career-copilot pin status`
   says the same from a terminal.
+- **The Console is tested in a real browser.** A CI job drives it in Chromium and clicks every form a
+  person would: approve (including the ticked-box and PIN checks), keyboard shortcuts, edit, reject,
+  revoke, done, idle unlock, job and inbox status, courses and plan controls, the three drafting screens,
+  and purge. Any browser error or a POST without the Console's own Origin fails the test. Both bugs fixed
+  below would have been caught. Runs locally with the new `browser` extra.
 
 ### Fixed
 

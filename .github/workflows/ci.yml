@@ -25,3 +25,25 @@ jobs:
       - name: Run tests
         # --extra gmail so the optional Gmail paths are covered rather than skipped.
         run: uv run --python ${{ matrix.python-version }} --extra dev --extra gmail pytest -q
+
+  browser:
+    # Drives the Console in a real Chromium: form POSTs, the CSP, keyboard shortcuts and the PIN,
+    # none of which TestClient can see.
+    runs-on: ubuntu-latest
+    env:
+      CAREER_COPILOT_REQUIRE_BROWSER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Chromium
+        run: uv run --python 3.12 --extra dev --extra browser playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: uv run --python 3.12 --extra dev --extra browser pytest -q tests/test_console_browser.py
