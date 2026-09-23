@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+import json
 import time
+from types import SimpleNamespace
+from urllib.parse import unquote_plus
 
 import pytest
 from starlette.testclient import TestClient
 
-from career_copilot import console
+from career_copilot import console, pin
 from career_copilot.service import CopilotError
 
 from conftest import CLOSE_DESCRIPTION
@@ -707,3 +712,212 @@ def test_external_text_on_the_network_screen_is_escaped(logged_in, cp):
     _connection(cp, name="<script>alert(1)</script>")
     r = logged_in.get("/network")
     assert "<script>alert(1)</script>" not in r.text
+
+
+# ---------------------------------------------------------------------------- approval PIN
+
+GOOD_PIN = "402917"
+WRONG_PIN = "518204"
+
+
+def _plain_draft(cp) -> int:
+    result = cp.draft_post("Writing up what we learned moving our regression suite to Playwright.", "idea")
+    assert not result["checks"].get("claims_to_verify") and not result["checks"].get("outbound_links")
+    return result["draft_id"]
+
+
+def _idle_out(client, app) -> str:
+    sid = client.cookies["cc_session"]
+    app.state.sessions[sid] = time.monotonic() - console.IDLE_TIMEOUT_SECONDS - 1
+    assert client.get("/", follow_redirects=False).headers["location"] == "/locked"
+    return sid
+
+
+def _error(response) -> str:
+    location = response.headers["location"]
+    assert "error=" in location, location
+    return unquote_plus(location)
+
+
+def test_without_a_pin_approval_is_unchanged(logged_in, cp):
+    draft_id = _plain_draft(cp)
+    assert 'name="pin"' not in logged_in.get(f"/review/{draft_id}").text
+    logged_in.post(f"/review/{draft_id}/approve", data={}, follow_redirects=False)
+    assert cp.get_draft(draft_id)["status"] == "approved"
+
+
+def test_without_a_pin_the_locked_page_explains_how_to_set_one(logged_in, app):
+    _idle_out(logged_in, app)
+    r = logged_in.get("/locked")
+    assert "career-copilot pin set" in r.text
+    assert 'action="/unlock"' not in r.text
+
+
+def test_with_a_pin_the_review_page_asks_for_it(logged_in, cp):
+    pin.set_pin(cp.store, GOOD_PIN)
+    assert 'name="pin"' in logged_in.get(f"/review/{_plain_draft(cp)}").text
+
+
+def test_with_a_pin_approval_without_it_is_refused_but_not_counted(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    draft_id = _plain_draft(cp)
+    r = logged_in.post(f"/review/{draft_id}/approve", data={}, follow_redirects=False)
+    assert "approval PIN" in _error(r)
+    assert cp.get_draft(draft_id)["status"] == "pending"
+    assert app.state.pin_failures == 0
+
+
+def test_with_a_pin_a_wrong_one_is_refused_and_counted(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    draft_id = _plain_draft(cp)
+    r = logged_in.post(f"/review/{draft_id}/approve", data={"pin": WRONG_PIN}, follow_redirects=False)
+    assert f"{console.PIN_MAX_FAILURES - 1} attempt(s) left" in _error(r)
+    assert cp.get_draft(draft_id)["status"] == "pending"
+    assert app.state.pin_failures == 1
+
+
+def test_with_a_pin_the_right_one_approves_and_resets_the_count(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    draft_id = _plain_draft(cp)
+    logged_in.post(f"/review/{draft_id}/approve", data={"pin": WRONG_PIN}, follow_redirects=False)
+    r = logged_in.post(f"/review/{draft_id}/approve", data={"pin": GOOD_PIN}, follow_redirects=False)
+    assert r.status_code == 303 and "error=" not in r.headers["location"]
+    assert cp.get_draft(draft_id)["status"] == "approved"
+    assert app.state.pin_failures == 0
+
+
+def test_the_pin_does_not_replace_the_other_approval_checks(logged_in, cp):
+    pin.set_pin(cp.store, GOOD_PIN)
+    draft_id = cp.draft_post("We cut flaky tests by 40%. Details: https://example.com", "idea")["draft_id"]
+    r = logged_in.post(f"/review/{draft_id}/approve", data={"pin": GOOD_PIN}, follow_redirects=False)
+    assert "confirm every number" in _error(r)
+    assert cp.get_draft(draft_id)["status"] == "pending"
+
+
+def test_the_right_pin_unlocks_an_idle_session_with_a_new_cookie(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    old = _idle_out(logged_in, app)
+    assert 'action="/unlock"' in logged_in.get("/locked").text
+
+    r = logged_in.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"
+    assert logged_in.cookies["cc_session"] != old
+    assert logged_in.get("/", follow_redirects=False).status_code == 200
+    assert old not in app.state.sessions and old not in app.state.locked_sessions
+
+
+def test_a_retired_session_id_cannot_be_unlocked_again(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    old = _idle_out(logged_in, app)
+    logged_in.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False)
+
+    replay = TestClient(app, base_url=f"http://127.0.0.1:{PORT}")
+    replay.cookies.set("cc_session", old)
+    assert replay.get("/", follow_redirects=False).headers["location"] == "/locked"
+    _error(replay.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False))
+    assert len(app.state.sessions) == 1
+
+
+def test_a_browser_that_never_logged_in_cannot_unlock_even_with_the_pin(client, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    assert "no session to unlock" in client.get("/locked").text
+    _error(client.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False))
+    assert not app.state.sessions
+    assert app.state.pin_failures == 0
+
+
+def test_unlock_from_another_origin_is_refused(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    _idle_out(logged_in, app)
+    r = logged_in.post("/unlock", data={"pin": GOOD_PIN}, headers={"origin": "https://evil.example"},
+                       follow_redirects=False)
+    assert r.status_code == 403
+    assert not app.state.sessions
+
+
+def test_unlock_without_a_pin_set_is_refused(logged_in, app):
+    _idle_out(logged_in, app)
+    assert "No PIN is set" in _error(logged_in.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False))
+    assert not app.state.sessions
+
+
+def test_five_wrong_pins_at_unlock_end_the_session_for_good(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    _idle_out(logged_in, app)
+    for _ in range(console.PIN_MAX_FAILURES):
+        logged_in.post("/unlock", data={"pin": WRONG_PIN}, follow_redirects=False)
+    assert app.state.pin_locked_out
+
+    _error(logged_in.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False))
+    assert logged_in.get("/", follow_redirects=False).headers["location"] == "/locked"
+    assert "Too many wrong PINs" in logged_in.get("/locked").text
+    assert not app.state.sessions
+
+
+def test_five_wrong_pins_at_approval_end_the_active_session(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    draft_id = _plain_draft(cp)
+    for _ in range(console.PIN_MAX_FAILURES):
+        r = logged_in.post(f"/review/{draft_id}/approve", data={"pin": WRONG_PIN}, follow_redirects=False)
+    assert r.headers["location"] == "/locked"
+    assert logged_in.get("/", follow_redirects=False).headers["location"] == "/locked"
+    assert cp.get_draft(draft_id)["status"] == "pending"
+
+    actions = [(e["action"], e["details"]) for e in cp.audit_log(50)["entries"]]
+    assert actions.count(("pin.failed", {"where": "approve"})) == console.PIN_MAX_FAILURES
+    assert [a for a, _ in actions].count("pin.lockout") == 1
+
+
+def test_a_guess_is_counted_before_it_is_checked(logged_in, cp, app, monkeypatch):
+    pin.set_pin(cp.store, GOOD_PIN)
+    seen = []
+    real = pin.verify
+    monkeypatch.setattr(pin, "verify", lambda entered, stored: seen.append(app.state.pin_failures) or real(entered, stored))
+    logged_in.post(f"/review/{_plain_draft(cp)}/approve", data={"pin": WRONG_PIN}, follow_redirects=False)
+    assert seen == [1]
+
+
+@pytest.mark.anyio
+async def test_guesses_sent_at_once_cannot_outrun_the_limit(app, cp, monkeypatch):
+    pin.set_pin(cp.store, GOOD_PIN)
+    checked = []
+    real = pin.verify
+    monkeypatch.setattr(pin, "verify", lambda entered, stored: checked.append(entered) or real(entered, stored))
+    request = SimpleNamespace(app=app)
+
+    guesses = [console._spend_pin_attempt(request, WRONG_PIN, "unlock") for _ in range(20)]
+    assert not any(await asyncio.gather(*guesses))
+    assert len(checked) == console.PIN_MAX_FAILURES
+    assert app.state.pin_locked_out
+    assert not await console._spend_pin_attempt(request, GOOD_PIN, "unlock")
+
+
+def test_pin_events_are_audited_without_the_pin(logged_in, cp, app):
+    pin.set_pin(cp.store, GOOD_PIN)
+    _idle_out(logged_in, app)
+    logged_in.post("/unlock", data={"pin": WRONG_PIN}, follow_redirects=False)
+    logged_in.post("/unlock", data={"pin": GOOD_PIN}, follow_redirects=False)
+
+    entries = cp.audit_log(50)["entries"]
+    assert [(e["actor"], e["action"]) for e in entries[:2]] == [("console", "session.unlock"),
+                                                                 ("console", "pin.failed")]
+    dumped = json.dumps(entries)
+    assert GOOD_PIN not in dumped and WRONG_PIN not in dumped
+    assert "session.unlock" in logged_in.get("/activity").text
+
+
+def test_no_console_route_can_set_or_clear_the_pin():
+    source = inspect.getsource(console)
+    assert "set_pin" not in source and "clear_pin" not in source
+
+
+def test_the_approve_shortcut_focuses_an_empty_pin_field_instead_of_submitting():
+    assert "input[name=pin]" in console.JS
+    assert "pin.focus()" in console.JS
+
+
+def test_data_page_says_whether_a_pin_is_set(logged_in, cp):
+    assert "Not set." in logged_in.get("/data").text
+    pin.set_pin(cp.store, GOOD_PIN)
+    r = logged_in.get("/data")
+    assert "Approval PIN" in r.text and "Not set." not in r.text

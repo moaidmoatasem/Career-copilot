@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import getpass
 import json
 import os
 import shlex
@@ -13,7 +14,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from . import boards, doctor as doctor_mod, gmail
+from . import boards, doctor as doctor_mod, gmail, pin as pin_mod
 from .config import home_dir, profile_file, template_text
 from .service import Copilot, CopilotError
 
@@ -234,6 +235,37 @@ def cmd_console(args: argparse.Namespace) -> int:
     return console.run(open_browser=not args.no_browser)
 
 
+def cmd_pin(args: argparse.Namespace) -> int:
+    store = Copilot().store
+    if args.action == "status":
+        print("Approval PIN: " + ("set" if pin_mod.is_set(store) else "not set"))
+        return 0
+    if not sys.stdin.isatty():
+        print("pin needs an interactive terminal: only a person may set or clear the approval PIN.", file=sys.stderr)
+        return 2
+    if args.action == "clear":
+        if pin_mod.clear_pin(store):
+            print(good("Approval PIN cleared.") + " The Console no longer asks for one, and an idle lock needs a "
+                  "fresh link from `career-copilot console`.")
+        else:
+            print("No approval PIN was set.")
+        return 0
+    print(f"The Console will ask for this PIN on every approval, and accept it to unlock an idle session.\n"
+          f"{pin_mod.MIN_LENGTH} to {pin_mod.MAX_LENGTH} digits. Don't reuse a PIN from anywhere else.")
+    entered = getpass.getpass("New PIN: ")
+    try:
+        pin_mod.validate(entered)
+    except pin_mod.PinError as exc:
+        print(warn(f"Not set: {exc}."), file=sys.stderr)
+        return 1
+    if getpass.getpass("Again: ") != entered:
+        print(warn("Not set: the two PINs didn't match."), file=sys.stderr)
+        return 1
+    pin_mod.set_pin(store, entered)
+    print(good("Approval PIN set.") + " A Console that's already running picks it up on its next request.")
+    return 0
+
+
 def cmd_claude_config(_: argparse.Namespace) -> int:
     print(json.dumps(claude_config_snippet(), indent=2))
     return 0
@@ -421,6 +453,9 @@ def main(argv: list[str] | None = None) -> int:
     doc.add_argument("--json", action="store_true", help="machine-readable output")
     doc.set_defaults(func=cmd_doctor)
     sub.add_parser("claude-config", help="print the Claude Desktop config snippet").set_defaults(func=cmd_claude_config)
+    pin_cmd = sub.add_parser("pin", help="set, clear or check the Console's approval PIN (interactive)")
+    pin_cmd.add_argument("action", choices=["set", "clear", "status"])
+    pin_cmd.set_defaults(func=cmd_pin)
     console = sub.add_parser("console", help="open the local approval web app (localhost only)")
     console.add_argument("--no-browser", action="store_true", help="print the link instead of opening it")
     console.set_defaults(func=cmd_console)
