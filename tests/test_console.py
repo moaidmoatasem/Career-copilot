@@ -87,6 +87,12 @@ def test_security_headers_present(logged_in):
     assert "script-src 'self'" in r.headers["content-security-policy"]
 
 
+def test_no_inline_styles_that_the_csp_would_drop():
+    # `style-src 'self'` makes browsers ignore every style="" attribute, silently: chips lost their
+    # red, bars their width. Styling lives in the stylesheet, as classes.
+    assert "style=" not in inspect.getsource(console)
+
+
 def test_referrer_policy_lets_the_browser_send_a_real_origin(logged_in):
     # Under "no-referrer" a browser sends `Origin: null` on form POSTs, and every Console form was
     # refused as an origin mismatch. TestClient sends no Origin at all, so only this header shows it.

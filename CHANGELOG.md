@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limit. Failures, the lockout and each unlock are written to the audit log, never with the PIN in them.
 - The Data & privacy page says whether a PIN is set and how to change it; `career-copilot pin status`
   says the same from a terminal.
+- **The Console is tested in a real browser.** A CI job drives it in Chromium and clicks every form a
+  person would: approve (including the ticked-box and PIN checks), keyboard shortcuts, edit, reject,
+  revoke, done, idle unlock, job and inbox status, courses and plan controls, the three drafting screens,
+  and purge. Any browser error or a POST without the Console's own Origin fails the test. Both bugs fixed
+  below would have been caught. Runs locally with the new `browser` extra.
 
 ### Fixed
 
@@ -50,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mismatch — request blocked". The tests never saw it because their client sends no Origin header. The
   policy is now `same-origin`, which still sends nothing to other sites, and a `null` Origin is still
   refused.
+- **Score bars show the score.** The Console's Content-Security-Policy (`style-src 'self'`) makes
+  browsers ignore inline `style=` attributes, and the bars set their width inline, so every fit and
+  capacity bar drew at 100% — a job matching 27% of its skills looked like a perfect match. The same
+  policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
+  review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
+  keeps `style=` out of the Console, and the favicon request no longer logs a 404.
 
 ## [0.3.0] - 2026-09-19
 
