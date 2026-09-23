@@ -21,6 +21,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`career-copilot import-export`**, so the LinkedIn export can be imported from a terminal. Every
   other import already had a CLI command; this one was reachable only by asking Claude, which meant a
   downloaded ZIP had no way in without Claude Desktop running.
+- **An approval PIN for the Console.** `career-copilot pin set` makes every approval in the Console
+  ask for a PIN, so a browser agent with a Console tab open can reach Approve but can't use it. Before
+  this, `career-copilot review` was the only approval surface such an agent couldn't operate. The PIN is
+  optional; without one the Console behaves exactly as before.
+- **The idle lock can be unlocked.** After 15 minutes idle the same PIN unlocks the session, instead of
+  the only way back being a fresh `career-copilot console` link. It unlocks only the browser that opened
+  the one-time link, and issues a new session cookie when it does; a browser that never logged in still
+  needs a new link.
+- The PIN is set and cleared only from an interactive terminal (`pin set` / `pin clear` refuse piped
+  input, like `review`). No MCP tool and no Console page can set, change or read it, so nothing driving
+  the chat or the browser can pick its own. Only a salted scrypt hash is stored, in the local database.
+- Five wrong PINs, at unlock or approval, end the Console session until you run `career-copilot
+  console` again. Each guess is counted before it is checked, so guesses sent at once can't slip past the
+  limit. Failures, the lockout and each unlock are written to the audit log, never with the PIN in them.
+- The Data & privacy page says whether a PIN is set and how to change it; `career-copilot pin status`
+  says the same from a terminal.
 
 ### Fixed
 
@@ -28,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`Saved Jobs.csv`, `Saved Jobs_1.csv`, …) and the reader kept only the first one it saw, so accounts
   large enough to be sharded silently lost the rest — connections and messages included, not just
   saved jobs. Shards are now folded onto the table they belong to and read together.
+- **Console forms work in a real browser.** The Console sent `Referrer-Policy: no-referrer`, and under
+  that policy browsers send `Origin: null` on form submissions, which the Console's own Origin check
+  refused. So in Chrome every approve, reject, edit, purge and queue-draft button answered "Origin
+  mismatch — request blocked". The tests never saw it because their client sends no Origin header. The
+  policy is now `same-origin`, which still sends nothing to other sites, and a `null` Origin is still
+  refused.
 
 ## [0.3.0] - 2026-09-19
 

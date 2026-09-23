@@ -10,9 +10,11 @@ Security posture (see README "Security model"):
 * binds 127.0.0.1 only, never 0.0.0.0;
 * a one-time launch token (printed by `career-copilot console`) is exchanged for an
   HttpOnly, SameSite=Strict session cookie; the token cannot be reused;
-* the session locks after 15 minutes idle — there is no PIN yet (tracked as an open
-  decision in the product plan), so unlocking means running `career-copilot console`
-  again from a terminal;
+* the session locks after 15 minutes idle. With an approval PIN set (`career-copilot pin
+  set`, terminal only) the same browser can unlock it with the PIN, and every approval
+  asks for the PIN too, so something driving the browser can't approve on its own; five
+  wrong PINs end the session. Without a PIN, unlocking means running
+  `career-copilot console` again from a terminal;
 * Host and Origin headers are checked on every request to close DNS-rebinding and
   cross-site-request paths; a strict Content-Security-Policy allows only this
   server's own same-origin assets (no CDN, no inline script);
@@ -33,6 +35,7 @@ from typing import Any, Callable
 from urllib.parse import quote_plus
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -40,7 +43,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import boards
+from . import boards, pin
 from .service import (
     ACTIVE_TIERS, ALL_TIERS, COURSE_STATUSES, INBOX_STATUSES, JOB_STATUSES, Copilot, CopilotError,
 )
@@ -48,6 +51,7 @@ from .service import (
 IDLE_TIMEOUT_SECONDS = 15 * 60
 LAUNCH_TOKEN_TTL_SECONDS = 10 * 60
 SESSION_COOKIE = "cc_session"
+PIN_MAX_FAILURES = 5
 PURGE_CHOICES = ("inbox", "news", "jobs", "connections", "snapshot", "drafts", "courses", "sponsors", "all")
 REJECT_REASONS = ("wrong facts", "tone", "not needed", "other")
 
@@ -236,7 +240,13 @@ JS = """
     var body = document.body;
     if (e.key === "?") { if (help) help.classList.toggle("open"); return; }
     if (e.key === "Escape") { if (help) help.classList.remove("open"); return; }
-    if (e.key === "a") { var f = document.getElementById("approve-form"); if (f) f.requestSubmit(); }
+    if (e.key === "a") {
+      var f = document.getElementById("approve-form");
+      if (f) {
+        var pin = f.querySelector("input[name=pin]");
+        if (pin && !pin.value) { e.preventDefault(); pin.focus(); } else { f.requestSubmit(); }
+      }
+    }
     else if (e.key === "e") { var el = document.querySelector("[data-key-edit]"); if (el) location.href = el.href; }
     else if (e.key === "r") { var rr = document.querySelector("[data-key-reject]"); if (rr) rr.focus(); }
     else if (e.key === "j" || e.key === "s") { var n = document.querySelector("[data-key-next]"); if (n) location.href = n.href; }
@@ -451,11 +461,14 @@ def review_detail(request: Request) -> Response:
     content_block = f'<div class="external"><span class="src">draft text</span>{esc(d["content"])}</div>'
     actions = ""
     if status == "pending":
+        pin_field = ('<label>Approval PIN</label><input type="password" name="pin" inputmode="numeric" '
+                     'autocomplete="off" required>' if pin.is_set(cp.store) else "")
         actions = f"""
 <form id="approve-form" method="post" action="/review/{draft_id}/approve" class="card">
   <h2>Approve</h2>
   {checks_html}
   <label>Note (optional)</label><input type="text" name="note">
+  {pin_field}
   <div class="row" style="margin-top:10px">
     <button type="submit">Approve (a)</button>
     <a class="btn secondary" data-key-edit href="/review/{draft_id}/edit">Edit (e)</a>
@@ -559,6 +572,15 @@ async def review_approve(request: Request) -> Response:
             return error_redirect(f"/review/{draft_id}", "confirm every link before approving")
     if checks.get("flags") and form.get("flag_ack") != "on":
         return error_redirect(f"/review/{draft_id}", "acknowledge the safety flag before approving")
+    if pin.is_set(cp.store):
+        entered = str(form.get("pin", ""))
+        if not entered.strip():
+            return error_redirect(f"/review/{draft_id}", "enter your approval PIN to approve")
+        accepted = await _spend_pin_attempt(request, entered, "approve")
+        if request.app.state.pin_locked_out:  # this guess, or one racing it, ended the session
+            return RedirectResponse("/locked", status_code=303)
+        if not accepted:
+            return error_redirect(f"/review/{draft_id}", _pin_refusal(request))
     try:
         cp.approve_draft(draft_id, note=form.get("note", ""))
     except CopilotError as exc:
@@ -1153,6 +1175,22 @@ def activity(request: Request) -> HTMLResponse:
     return layout(request, title="Activity", active="/activity", body=body)
 
 
+def _pin_card(pin_set: bool) -> str:
+    if pin_set:
+        state = ("Set. This Console asks for it on every approval, and accepts it to unlock an idle session "
+                 "in the browser that started it.")
+    else:
+        state = ("Not set. Approving here needs only this session, and an idle lock needs a fresh link from "
+                 "<code>career-copilot console</code>.")
+    return f"""<div class="card">
+  <h2>Approval PIN</h2>
+  <p>{state}</p>
+  <p class="muted">Set or change it with <code>career-copilot pin set</code>, clear it with
+     <code>career-copilot pin clear</code> — in a terminal only, never from this page, so nothing driving
+     this browser can choose its own.</p>
+</div>"""
+
+
 def data_privacy(request: Request) -> HTMLResponse:
     cp: Copilot = request.app.state.cp
     status = cp.status()
@@ -1181,6 +1219,7 @@ def data_privacy(request: Request) -> HTMLResponse:
      <strong>Nothing is ever sent to LinkedIn by this app or the MCP server</strong> — every action is a
      draft you copy and do yourself.</p>
 </div>
+{_pin_card(pin.is_set(cp.store))}
 <div class="card">
   <h2>Counts</h2>
   <p>Jobs: {sum(status['jobs_by_tier'].values())} · Inbox open: {status['inbox_open']} ·
@@ -1219,7 +1258,9 @@ def _security_headers(response: Response, port: int) -> None:
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    # Not "no-referrer": under it browsers send `Origin: null` on every form POST, which the Origin
+    # check refuses, so no Console form worked in a real browser. Other sites still get nothing.
+    response.headers["Referrer-Policy"] = "same-origin"
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -1234,7 +1275,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             if origin is not None and origin not in state.allowed_origins:
                 return PlainTextResponse("Origin mismatch — request blocked.", status_code=403)
 
-        if path == "/login":
+        if path in ("/login", "/unlock"):
             response = await call_next(request)
             _security_headers(response, state.port)
             return response
@@ -1246,8 +1287,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         sid = request.cookies.get(SESSION_COOKIE)
         now = time.monotonic()
         sessions: dict[str, float] = state.sessions
-        if not sid or sid not in sessions or now - sessions[sid] > IDLE_TIMEOUT_SECONDS:
-            sessions.pop(sid, None)
+        if sid in sessions and now - sessions[sid] > IDLE_TIMEOUT_SECONDS:
+            # Idle, not ended: set aside so this browser, and only this one, can unlock it with the PIN.
+            del sessions[sid]
+            state.locked_sessions.add(sid)
+        if not sid or sid not in sessions:
             if path == "/locked":
                 response = await call_next(request)
             else:
@@ -1278,16 +1322,102 @@ def login(request: Request) -> Response:
     return response
 
 
+def _pin_refusal(request: Request) -> str:
+    state = request.app.state
+    if state.pin_locked_out:
+        return "Too many wrong PINs. Run `career-copilot console` again for a new link."
+    if not pin.is_set(state.cp.store):
+        return "No PIN is set. Run `career-copilot console` again for a new link."
+    left = PIN_MAX_FAILURES - state.pin_failures
+    return f"Wrong PIN — {left} attempt(s) left before this Console ends the session."
+
+
+def _lock_out(state: Any) -> None:
+    state.pin_locked_out = True
+    state.sessions.clear()
+    state.locked_sessions.clear()
+    state.cp.store.audit("console", "pin.lockout", "console", {"failures": state.pin_failures})
+
+
+async def _spend_pin_attempt(request: Request, entered: str, where: str) -> bool:
+    """One PIN attempt, counted before it is checked, so guesses sent at once can't outrun the limit.
+
+    The limit check and the increment have no await between them, and the event loop runs one
+    coroutine at a time, so the sixth concurrent guess is refused before scrypt ever sees it.
+    """
+    state = request.app.state
+    stored = pin.stored_hash(state.cp.store)
+    if not stored or state.pin_locked_out or state.pin_failures >= PIN_MAX_FAILURES:
+        return False
+    state.pin_failures += 1
+    if await run_in_threadpool(pin.verify, entered, stored):
+        state.pin_failures = 0
+        return True
+    state.cp.store.audit("console", "pin.failed", "console", {"where": where})
+    if state.pin_failures >= PIN_MAX_FAILURES and not state.pin_locked_out:
+        _lock_out(state)
+    return False
+
+
 def locked(request: Request) -> HTMLResponse:
-    return HTMLResponse(
-        "<!doctype html><title>Console locked</title>"
-        "<body style='font:14px sans-serif;padding:40px;max-width:520px'>"
-        "<h1>Console locked</h1>"
-        "<p>Your session ended (15 minutes idle, or it was never started). There is no PIN yet in this "
-        "release, so unlocking means running <code>career-copilot console</code> again from a terminal — "
-        "that command prints a fresh one-time link.</p></body>",
-        status_code=200,
-    )
+    state = request.app.state
+    sid = request.cookies.get(SESSION_COOKIE)
+    pin_set = pin.is_set(state.cp.store)
+    if state.pin_locked_out:
+        body = ("<p>Too many wrong PINs, so this Console ended the session. Run <code>career-copilot "
+                "console</code> again from a terminal — it prints a fresh one-time link.</p>")
+    elif pin_set and sid in state.locked_sessions:
+        body = """<p>Locked after 15 minutes idle. Enter your approval PIN to carry on.</p>
+<form method="post" action="/unlock" class="card">
+  <label>Approval PIN</label>
+  <input type="password" name="pin" inputmode="numeric" autocomplete="off" required autofocus>
+  <button type="submit" style="margin-top:10px">Unlock</button>
+</form>"""
+    elif pin_set:
+        body = ("<p>This browser has no session to unlock. Run <code>career-copilot console</code> again from "
+                "a terminal — it prints a fresh one-time link.</p>")
+    else:
+        body = ("<p>Your session ended (15 minutes idle, or it was never started). Run <code>career-copilot "
+                "console</code> again from a terminal — it prints a fresh one-time link.</p>"
+                "<p class=\"muted\">Set an approval PIN with <code>career-copilot pin set</code> and an idle "
+                "session can be unlocked here instead.</p>")
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Console locked · Copilot Console</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<main class="main">
+  <h1>Console locked</h1>
+  {banner_from_query(request)}
+  {body}
+</main>
+</body>
+</html>""", status_code=200)
+
+
+async def unlock(request: Request) -> Response:
+    state = request.app.state
+    sid = request.cookies.get(SESSION_COOKIE)
+    form = await request.form()
+    if not sid or sid not in state.locked_sessions:
+        return error_redirect("/locked", "This browser has no locked session to unlock.")
+    entered = str(form.get("pin", ""))
+    if not entered.strip():
+        return error_redirect("/locked", "Enter your PIN.")
+    # Re-check the session after the slow PIN check: a lockout may have landed in the meantime.
+    if not await _spend_pin_attempt(request, entered, "unlock") or sid not in state.locked_sessions:
+        return error_redirect("/locked", _pin_refusal(request))
+    state.locked_sessions.discard(sid)
+    new_sid = secrets.token_urlsafe(32)
+    state.sessions[new_sid] = time.monotonic()
+    state.cp.store.audit("console", "session.unlock", "console", {})
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(SESSION_COOKIE, new_sid, httponly=True, samesite="strict", secure=False, path="/")
+    return response
 
 
 async def static_css(request: Request) -> Response:
@@ -1513,6 +1643,7 @@ def create_app(cp: Copilot, port: int) -> Starlette:
         Route("/", today),
         Route("/login", login),
         Route("/locked", locked),
+        Route("/unlock", unlock, methods=["POST"]),
         Route("/static/app.css", static_css),
         Route("/static/app.js", static_js),
         Route("/review", review_list),
@@ -1553,6 +1684,9 @@ def create_app(cp: Copilot, port: int) -> Starlette:
     app.state.port = port
     app.state.allowed_origins = allowed_origins
     app.state.sessions = {}
+    app.state.locked_sessions = set()
+    app.state.pin_failures = 0
+    app.state.pin_locked_out = False
     app.state.launch_token = secrets.token_urlsafe(32)
     app.state.launch_token_used = False
     app.state.launch_token_created = time.monotonic()
@@ -1579,6 +1713,8 @@ def run(cp: Copilot | None = None, open_browser: bool = True) -> int:
     print("Copilot Console (localhost only — this link works once):")
     print(f"  {url}")
     print("If it expires or you close the tab, run `career-copilot console` again.")
+    if not pin.is_set(cp.store):
+        print("Tip: `career-copilot pin set` adds an approval PIN, which also unlocks an idle session.")
     if open_browser:
         try:
             webbrowser.open(url)

@@ -26,6 +26,14 @@ def test_review_refuses_without_a_terminal(tmp_path):
     assert "interactive terminal" in result.stderr
 
 
+@pytest.mark.parametrize("action", ["set", "clear"])
+def test_pin_refuses_without_a_terminal(tmp_path, action):
+    result = subprocess.run([sys.executable, "-m", "career_copilot.cli", "pin", action], input="402917\n402917\n",
+                            capture_output=True, text=True, env=_env(tmp_path))
+    assert result.returncode == 2
+    assert "interactive terminal" in result.stderr
+
+
 def test_init_creates_profile_and_prints_config(tmp_path):
     result = subprocess.run([sys.executable, "-m", "career_copilot.cli", "init"], capture_output=True, text=True,
                             env=_env(tmp_path))
