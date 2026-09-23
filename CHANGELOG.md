@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`Saved Jobs.csv`, `Saved Jobs_1.csv`, …) and the reader kept only the first one it saw, so accounts
   large enough to be sharded silently lost the rest — connections and messages included, not just
   saved jobs. Shards are now folded onto the table they belong to and read together.
+- **Console forms work in a real browser.** The Console sent `Referrer-Policy: no-referrer`, and under
+  that policy browsers send `Origin: null` on form submissions, which the Console's own Origin check
+  refused. So in Chrome every approve, reject, edit, purge and queue-draft button answered "Origin
+  mismatch — request blocked". The tests never saw it because their client sends no Origin header. The
+  policy is now `same-origin`, which still sends nothing to other sites, and a `null` Origin is still
+  refused.
 
 ## [0.3.0] - 2026-09-19
 

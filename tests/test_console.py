@@ -82,6 +82,19 @@ def test_security_headers_present(logged_in):
     assert "script-src 'self'" in r.headers["content-security-policy"]
 
 
+def test_referrer_policy_lets_the_browser_send_a_real_origin(logged_in):
+    # Under "no-referrer" a browser sends `Origin: null` on form POSTs, and every Console form was
+    # refused as an origin mismatch. TestClient sends no Origin at all, so only this header shows it.
+    assert logged_in.get("/").headers["referrer-policy"] == "same-origin"
+
+
+def test_a_null_origin_is_still_refused(logged_in, cp):
+    cp.draft_post("A draft that should survive.", "idea")
+    r = logged_in.post("/data/purge", data={"what": "drafts", "confirm": "drafts"}, headers={"origin": "null"})
+    assert r.status_code == 403
+    assert cp.list_drafts("pending", 10)["drafts"]
+
+
 # ---------------------------------------------------------------------------- today & nav
 
 def test_today_shows_status(logged_in, cp):

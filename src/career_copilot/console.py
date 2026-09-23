@@ -1219,7 +1219,9 @@ def _security_headers(response: Response, port: int) -> None:
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    # Not "no-referrer": under it browsers send `Origin: null` on every form POST, which the Origin
+    # check refuses, so no Console form worked in a real browser. Other sites still get nothing.
+    response.headers["Referrer-Policy"] = "same-origin"
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
