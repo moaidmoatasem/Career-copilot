@@ -161,7 +161,7 @@ Other prompts: **Weekly career review**, **Job deep dive** (needs a job id), **P
 ## Copilot Console
 
 `career-copilot console` starts a small local web app — Today, Review, Jobs, Career path, Inbox,
-Profile audit, Network, News, Activity, and Data & privacy — and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
+Profile audit, Network, News, Activity, Settings, and Data & privacy — and opens it in your browser with a one-time link. It talks only to the local database; it never talks to
 Claude and it never reaches LinkedIn. There is no "send", "post" or "apply" button anywhere in it: approving
 a draft only moves it to *Ready to do*, where you copy the text and act on LinkedIn yourself.
 
@@ -191,8 +191,14 @@ a draft only moves it to *Ready to do*, where you copy the text and act on Linke
 - **Network** finds first-degree connections at a job's company from your export, and can draft the ask.
 - **News** ranks your configured feeds, refreshes them, and drafts a post — your own take, not a summary.
 - **Activity** is the audit trail, read-only over a log the database keeps append-only.
+- **Settings** edits `profile.toml` in place: candidate, targets, skills, tiers, learning hours, retention
+  and news interests. Feeds and skill aliases still need a hand edit for now (or ask Claude — those need a
+  bit more than one text field each). Saving rewrites the whole file, so any comments in it — the template's
+  or your own — are not kept; the version before your save is copied to `profile.toml.bak`. Every save is
+  validated the same way the file is on load, so a bad value (an unknown seniority, tiers out of order) is
+  rejected before anything on disk changes.
 
-Known gaps, deliberately out of scope for now: Settings/profile.toml editing, and no phone mode.
+Known gaps, deliberately out of scope for now: no phone mode.
 
 For the profile audit, referrals, replies owed and your saved jobs, request your export in LinkedIn (**Settings → Data privacy → Get a copy of your data**), drop the ZIP into `~/.career-copilot/imports/`, and either ask Claude to import it or run it yourself:
 
@@ -270,8 +276,8 @@ Network: `refresh_news` (your configured feeds only), `sync_gmail` (read-only sc
 
 ## Roadmap
 
-- **Next:** editing `profile.toml` from the Data screen, and widening description coverage beyond the four
-  Gulf boards.
+- **Next:** widening description coverage beyond the four Gulf boards, and a Settings editor for feeds and
+  skill aliases (`[[news.feeds]]` and `[skills.aliases]` still need a hand edit).
 - **Later:** an optional phone approval mode, official *Share on LinkedIn* posting for approved posts (OAuth,
   `w_member_social`; tokens last 60 days and need manual re-authorisation), more job boards, calendar-aware
   interview prep.
@@ -286,7 +292,7 @@ uv run --extra dev --extra browser playwright install chromium
 uv run --extra dev --extra browser pytest tests/test_console_browser.py
 ```
 
-The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import (including saved jobs and LinkedIn's sharded CSVs) and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, the approval PIN and idle unlock, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network and news screens. GitHub Actions runs all 338 tests on Python 3.11 and 3.12 for every push and pull request.
+The suite covers parsing, scoring and tiers, safety flags, the approval integrity rules, export import (including saved jobs and LinkedIn's sharded CSVs) and path confinement, learning plans, news, the MCP tool surface over the protocol, a real stdio server end to end, the Console's routes (session security, the approval PIN and idle unlock, approve/edit/reject/revoke/done, job rescoring, purge), sponsor-register matching against the real collisions in it, and the Console's career, activity, profile audit, network, news and settings screens — including that a rejected settings save (an unknown seniority, tiers out of order) leaves profile.toml byte-for-byte unchanged. GitHub Actions runs all 350 tests on Python 3.11 and 3.12 for every push and pull request.
 
 A separate CI job drives the Console in a real Chromium: it clicks every form (approve, edit, reject, revoke, done, the PIN, idle unlock, job and inbox status, courses, the drafting screens, purge) and fails if the browser logs any error or a form POST carries anything but the Console's own Origin. That is what catches what a test client can't see, such as a Content-Security-Policy refusal.
 

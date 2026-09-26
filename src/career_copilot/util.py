@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -50,6 +51,13 @@ def sha256_file(path: Path) -> str:
 
 def short_hash(text: str, length: int = 16) -> str:
     return sha256(text)[:length]
+
+
+def restrict_file(path: Path, mode: int) -> None:
+    try:
+        os.chmod(path, mode)
+    except OSError:  # e.g. Windows or unusual filesystems
+        pass
 
 
 def strip_query(url: str) -> str:

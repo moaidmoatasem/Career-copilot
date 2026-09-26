@@ -42,6 +42,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   revoke, done, idle unlock, job and inbox status, courses and plan controls, the three drafting screens,
   and purge. Any browser error or a POST without the Console's own Origin fails the test. Both bugs fixed
   below would have been caught. Runs locally with the new `browser` extra.
+- **A Settings screen edits `profile.toml`.** Candidate, targets, skills, tiers, learning hours,
+  retention and news interests are now a form in the Console instead of a file you hand-edit. Every save
+  is validated the same way the file is on load — the exact same `load_profile()` — so a bad value (an
+  unknown seniority, tiers out of order, a non-numeric field) is rejected before anything on disk
+  changes; the rejected save leaves `profile.toml` byte-for-byte as it was. `[[news.feeds]]` and
+  `[skills.aliases]` aren't in the form yet (they need add/remove-row UI this pass didn't build) and
+  round-trip through every save unedited.
+- Saving from Settings keeps one `profile.toml.bak` — the file as it was immediately before your save —
+  because the save rewrites the whole file and any comments in it, the template's or your own, are not
+  kept. The page says so before every save. The write itself goes to a temp file, is validated, and only
+  then atomically replaces the real file, so a crash mid-save can't leave a half-written `profile.toml`.
+  The `0600` permission is kept on both the new file and the backup. The audit log records which field
+  *names* changed, never the values — profile content otherwise never leaves the local database in raw
+  form.
 
 ### Fixed
 

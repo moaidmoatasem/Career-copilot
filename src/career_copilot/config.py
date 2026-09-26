@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tomllib
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from importlib import resources
 from pathlib import Path
 
@@ -179,3 +180,74 @@ def load_profile(path: Path) -> Profile:
         retention_days=_int(privacy, "retention_days", 90, 7, 3650),
         configured=True,
     )
+
+
+def _toml_str(value: str) -> str:
+    """A TOML basic string. Escapes backslash, quote and control characters."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\t", "\\t")
+    escaped = escaped.replace("\r", "\\r").replace("\n", "\\n")
+    return f'"{escaped}"'
+
+
+def _toml_str_list(values: list[str]) -> str:
+    return "[" + ", ".join(_toml_str(v) for v in values) + "]"
+
+
+def _toml_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def profile_to_toml(profile: Profile) -> str:
+    """Serialize a Profile back to profile.toml, in the same section order as the template.
+
+    This is a writer scoped to this one dataclass, not a general TOML library: the shape of
+    Profile is fixed and small, so a general writer would be more code, not less. The one thing
+    it cannot do that a human editor can is keep comments — every '#' in the file is lost on the
+    first save from here, which is why the caller always keeps a .bak of what this replaces.
+    """
+    saved = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    aliases_lines = "\n".join(
+        f"{_toml_str(canon)} = {_toml_str_list(values)}" for canon, values in profile.skill_aliases.items()
+    )
+    feeds_blocks = "\n\n".join(
+        f"[[news.feeds]]\nname = {_toml_str(feed.name)}\nurl = {_toml_str(feed.url)}" for feed in profile.feeds
+    )
+    return f"""# Written by Career Copilot Settings on {saved}.
+# Comments are not preserved when this file is saved from the Console — see profile.toml.bak
+# for the version before this save.
+
+[candidate]
+name = {_toml_str(profile.name)}
+linkedin_url = {_toml_str(profile.linkedin_url)}
+seniority = {_toml_str(profile.seniority)}
+acceptable_seniority = {_toml_str_list(profile.acceptable_seniority)}
+premium = {_toml_bool(profile.premium)}
+
+[targets]
+titles = {_toml_str_list(profile.target_titles)}
+locations = {_toml_str_list(profile.target_locations)}
+remote_ok = {_toml_bool(profile.remote_ok)}
+exclude_title_keywords = {_toml_str_list(profile.exclude_title_keywords)}
+
+[skills]
+have = {_toml_str_list(profile.skills_have)}
+learning = {_toml_str_list(profile.skills_learning)}
+
+[skills.aliases]
+{aliases_lines + chr(10) if aliases_lines else ""}
+[tiers]
+matched = {profile.tier_matched}
+promising = {profile.tier_promising}
+close = {profile.tier_close}
+
+[learning]
+hours_per_week = {profile.hours_per_week}
+
+[privacy]
+retention_days = {profile.retention_days}
+
+[news]
+interests = {_toml_str_list(profile.interests)}
+
+{feeds_blocks}
+""".rstrip() + "\n"
