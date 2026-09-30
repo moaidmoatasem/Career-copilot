@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **The News screen's escaping test works on any date (F6).** It stored its hostile item on a fixed
+  date, 18 Sep 2026, and the News screen shows only the last 7 days. So from 26 Sep the item fell off
+  the screen: the test failed, and its "no raw `<script>`" check passed without checking anything. The
+  item is now dated when the test runs, and the test first asserts the item is on screen, so it fails
+  if escaping is removed rather than passing on an empty page.
 
 ## [0.3.0] - 2026-09-19
 
