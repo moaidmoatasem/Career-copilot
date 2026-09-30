@@ -3,7 +3,9 @@
 Weights (with a job description):  skills 50% · title 25% · level 15% · location 10%,
 plus minimum skill coverage per tier (matched 70%, promising 45%, close 25%).
 Weights (title-only, e.g. from a job alert email): title 55% · level 25% · location 20%,
-and the tier is capped at "promising" until the full description is added.
+and the tier is capped at "promising" until the full description is added. A title-only job whose
+title is outside the role family you target (QA, test, SDET, automation) is low fit, since level and
+location alone would otherwise carry it to close or promising.
 """
 
 from __future__ import annotations
@@ -102,6 +104,12 @@ def title_similarity(title: str, targets: list[str]) -> tuple[float, str]:
     if not job_tokens & _ROLE_FAMILY:
         best = min(best, 0.35)
     return round(best, 3), best_target
+
+
+def in_role_family(title: str, profile: Profile) -> bool:
+    """False only when your target titles name a role family (QA, test, SDET, automation) and this title doesn't."""
+    family = set().union(*(_title_tokens(t) for t in profile.target_titles)) & _ROLE_FAMILY
+    return not family or bool(_title_tokens(title) & _ROLE_FAMILY)
 
 
 def detect_level(title: str, description: str) -> tuple[str, str]:
@@ -241,6 +249,11 @@ def score_job(
         reasons.append(
             f"tier limited by skill coverage ({coverage:.0%} < {COVERAGE_GATES[ungated]:.0%} needed for '{ungated}')"
         )
+    if confidence == "low" and tier != "low_fit" and not in_role_family(title, profile):
+        # With no skills to go on, level and location carry 45% of the score, so a "Senior
+        # Accountant" in Dubai would otherwise reach close or promising on those alone.
+        tier = "low_fit"
+        reasons.append("title is outside the roles you target, and there are no skills to score it on")
     if confidence == "low" and tier == "matched":
         tier = "promising"
         reasons.append("capped at 'promising' until the full job description is added")

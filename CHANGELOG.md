@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **Non-QA roles no longer leak in on title alone (F1).** A job from an alert email has no description,
+  so level and location made up 45% of its score. That was enough to put "Senior Backend Engineer (Go)"
+  in Dubai at 64 (*promising*) and "Senior Accountant" at 51 (*close*). Without a skills-based score, a
+  title outside the role family your target titles name (QA, test, SDET, automation) is now low fit,
+  with the reason shown. "Senior QA Engineer" in Dubai stays *promising*. Profiles whose target titles
+  name none of those families aren't gated.
 - **The News screen's escaping test works on any date (F6).** It stored its hostile item on a fixed
   date, 18 Sep 2026, and the News screen shows only the last 7 days. So from 26 Sep the item fell off
   the screen: the test failed, and its "no raw `<script>`" check passed without checking anything. The
