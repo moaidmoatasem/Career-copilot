@@ -29,6 +29,22 @@ def test_title_only_job_is_capped_at_promising(tmp_path):
     assert any("capped" in reason for reason in result.reasons)
 
 
+def test_title_only_jobs_outside_the_role_family_are_low_fit(tmp_path):
+    p = profile(tmp_path)
+    for title in ("Senior Backend Engineer (Go)", "Senior Accountant"):
+        result = score_job(title, "", "Dubai, United Arab Emirates", p)
+        assert result.tier == "low_fit", f"{title!r} leaked in as {result.tier} ({result.score})"
+        assert any("outside the roles you target" in reason for reason in result.reasons)
+    assert score_job("Senior QA Engineer", "", "Dubai, United Arab Emirates", p).tier == "promising"
+
+
+def test_role_family_gate_needs_a_family_in_the_targets(tmp_path):
+    # A profile with no QA/test titles has no family to gate on, so its title-only jobs keep their tier.
+    p = profile(tmp_path)
+    p.target_titles = ["Senior Backend Engineer"]
+    assert score_job("Senior Backend Engineer", "", "Dubai, United Arab Emirates", p).tier != "low_fit"
+
+
 def test_skill_gaps_limit_the_tier(tmp_path):
     result = score_job("Senior QA Engineer", CLOSE_DESCRIPTION, "Cairo, Egypt", profile(tmp_path))
     assert result.tier == "close"
