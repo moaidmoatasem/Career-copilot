@@ -160,7 +160,11 @@ _INLINE_PREFERRED = re.compile(
     r"|nice to have|preferred|bonus points?|desirable)\b",
     re.I,
 )
-_OR_SEPARATOR = re.compile(r"\s*(?:,\s*)?(?:or|/)\s*", re.I)
+_OR_SEPARATOR = re.compile(r"\s*(?:,\s*)?\(?\s*(?:or|/)\s*", re.I)
+_LIST_SEPARATOR = re.compile(r"\s*,\s*")
+_AND_SEPARATOR = re.compile(r"\s*(?:,\s*)?(?:and|&)\s+", re.I)
+_OR_SIMILAR_TAIL = re.compile(r"^\s*(?:,\s*)?or\s+(?:similar|equivalent|other|comparable)\b", re.I)
+_EXAMPLES_LEAD_IN = re.compile(r"(?:\be\.?\s?g\.?|\bsuch as|\bfor example|\bfor instance)\s*[:,(]?\s*$", re.I)
 
 
 def normalise(name: str) -> str:
@@ -227,18 +231,52 @@ def skill_spans(text: str, extra: dict[str, list[str]] | None = None) -> list[tu
     return kept
 
 
+def _gap_kind(gap: str) -> str | None:
+    if _OR_SEPARATOR.fullmatch(gap):
+        return "or"
+    if _LIST_SEPARATOR.fullmatch(gap):
+        return "list"
+    if _AND_SEPARATOR.fullmatch(gap):
+        return "and"
+    return None
+
+
 def _alternative_groups(line: str, spans: list[tuple[int, int, str]]) -> list[set[str]]:
-    """Skills joined by 'or' or '/' ("Playwright or Selenium", "Jenkins/GitHub Actions") are alternatives."""
+    """Skills offered as a choice are alternatives:
+
+    "X or Y", "X/Y", "X (or Y)", "X, Y or Z", "X, Y or similar", and any list introduced by
+    "e.g." or "such as".
+    A plain list ("X, Y and Z") is not a choice, and "and" splits "X and Y or Z" into X plus (Y or Z).
+    """
     groups: list[set[str]] = []
-    current: set[str] = set()
-    for (_, end, left), (start, _, right) in zip(spans, spans[1:]):
-        if _OR_SEPARATOR.fullmatch(line[end:start]) and left != right:
-            current |= {left, right}
-        elif current:
-            groups.append(current)
-            current = set()
-    if current:
-        groups.append(current)
+    start = 0
+    while start < len(spans):
+        # A run of skills separated only by "or", "/", commas or "and".
+        end, kinds = start, []
+        while end + 1 < len(spans) and (kind := _gap_kind(line[spans[end][1]:spans[end + 1][0]])):
+            kinds.append(kind)
+            end += 1
+        run = spans[start:end + 1]
+        lead_in = line[spans[start - 1][1] if start else 0:spans[start][0]]
+        tail = line[run[-1][1]:spans[end + 1][0] if end + 1 < len(spans) else len(line)]
+        if _EXAMPLES_LEAD_IN.search(lead_in) or _OR_SIMILAR_TAIL.search(tail):
+            pieces = [(run, kinds)]  # examples of one thing: every item is an option
+        else:
+            pieces, piece, piece_kinds = [], [run[0]], []
+            for span, kind in zip(run[1:], kinds):
+                if kind == "and":
+                    pieces.append((piece, piece_kinds))
+                    piece, piece_kinds = [], []
+                else:
+                    piece_kinds.append(kind)
+                piece.append(span)
+            pieces.append((piece, piece_kinds))
+            pieces = [(p, k) for p, k in pieces if "or" in k]
+        for piece, _ in pieces:
+            group = {canon for _, _, canon in piece}
+            if len(group) > 1:
+                groups.append(group)
+        start = end + 1
     return groups
 
 

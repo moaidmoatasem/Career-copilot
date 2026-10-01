@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **Alternatives are read the way posts write them (F3).** Only a pair joined by "or" or "/" was
+  treated as a choice. So "Playwright (or Selenium)" made Selenium a separate requirement, and
+  "Jenkins, GitLab CI or GitHub Actions" grouped only the last two. The parser now reads the whole
+  coordinated list: "X (or Y)", "X, Y or Z", "X, Y or similar", and lists introduced by "e.g." or
+  "such as". A plain list ("Python, Docker and Jenkins") is still all required, and "and" still splits
+  "Python and Playwright or Selenium" into Python plus a choice. A phrasing suite covers each pattern.
 - **Referrals work at e& (F2).** Company names were cleaned down to letters and digits, so "e& UAE"
   became "e" and "uae". The first is one letter and the second a generic word, which left nothing to
   match, and referrals at one of the Gulf's largest employers always came back "too generic to match".
