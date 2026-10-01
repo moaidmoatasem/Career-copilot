@@ -75,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **Referrals work at e& (F2).** Company names were cleaned down to letters and digits, so "e& UAE"
+  became "e" and "uae". The first is one letter and the second a generic word, which left nothing to
+  match, and referrals at one of the Gulf's largest employers always came back "too generic to match".
+  An ampersand inside a name ("e&", "AT&T") is now kept. When nothing distinctive is left in a name, only
+  an exact match counts. A small alias list treats "e&", "Etisalat", "Etisalat by e&" and "Emirates
+  Telecommunications Group" as one company. Connections are matched on their company name, not the key
+  stored at import, so connections you imported earlier are found without re-importing.
 - **Non-QA roles no longer leak in on title alone (F1).** A job from an alert email has no description,
   so level and location made up 45% of its score. That was enough to put "Senior Backend Engineer (Go)"
   in Dubai at 64 (*promising*) and "Senior Accountant" at 51 (*close*). Without a skills-based score, a

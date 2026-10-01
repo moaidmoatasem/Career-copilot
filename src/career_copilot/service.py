@@ -14,7 +14,7 @@ from .config import LIMITS, ConfigError, Profile, home_dir, load_profile, profil
 from .safety import clean_text, prepare_untrusted
 from .scoring import score_job
 from .store import Store
-from .util import companies_match, company_tokens, restrict_file, sha256, sha256_file, short_hash, strip_query, utcnow
+from .util import companies_match, company_key, restrict_file, sha256, sha256_file, short_hash, strip_query, utcnow
 
 JOB_STATUSES = ("new", "shortlisted", "applying", "applied", "interviewing", "offer", "rejected", "archived")
 ACTIVE_TIERS = ("matched", "promising", "close")
@@ -871,14 +871,13 @@ class Copilot:
                     "note": "Import your LinkedIn data export (it includes Connections.csv) to look for referrals."}
         if not row["company"]:
             raise CopilotError("this job has no company name; add it with update_job first")
-        tokens = sorted(company_tokens(row["company"]))
-        if not tokens:
+        if not company_key(row["company"]):
             return {"job_id": job_id, "company": row["company"], "connections": [],
                     "note": "The company name is too generic to match reliably."}
+        # Matched in Python, not on the stored company_key: rows imported before a matching change
+        # carry an old key, and aliases ("Etisalat" for "e&") share no text with each other.
         candidates = self.store.query(
-            "SELECT name, company, position, profile_url, connected_on FROM connections WHERE "
-            + " OR ".join("company_key LIKE ?" for _ in tokens),
-            [f"%{t}%" for t in tokens],
+            "SELECT name, company, position, profile_url, connected_on FROM connections ORDER BY id"
         )
         matches = [c for c in candidates if companies_match(c["company"], row["company"])][:15]
         return {

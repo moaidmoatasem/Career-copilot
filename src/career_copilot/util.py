@@ -78,19 +78,42 @@ _GENERIC_COMPANY_WORDS = {
 }
 
 
-def company_key(name: str) -> str:
+# One employer, many names. Keys are canonical company keys; each alias is matched after
+# company_key() normalisation, either whole or with generic words (such as "uae") removed.
+COMPANY_ALIASES: dict[str, list[str]] = {
+    "e&": ["etisalat", "etisalat by e&", "emirates telecommunications", "emirates telecommunications group"],
+}
+
+
+def _normalise_company(name: str) -> str:
     text = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
-    text = re.sub(r"[^a-z0-9 ]+", " ", text.replace("fz-llc", "fzllc"))
-    tokens = [t for t in text.split() if t not in _LEGAL_SUFFIXES]
-    return " ".join(tokens)
+    # An ampersand inside a name ("e&", "at&t") is part of it; a standalone "&" means "and".
+    text = re.sub(r"[^a-z0-9& ]+", " ", text.replace("fz-llc", "fzllc"))
+    text = re.sub(r"(?<![a-z0-9])&(?![a-z0-9])", " ", text)
+    return " ".join(t for t in text.split() if t not in _LEGAL_SUFFIXES)
+
+
+_ALIAS_INDEX: dict[str, str] = {
+    _normalise_company(alias): canonical
+    for canonical, aliases in COMPANY_ALIASES.items()
+    for alias in [canonical, *aliases]
+}
+
+
+def company_key(name: str) -> str:
+    key = _normalise_company(name)
+    distinctive = " ".join(t for t in key.split() if t not in _GENERIC_COMPANY_WORDS)
+    return _ALIAS_INDEX.get(key) or _ALIAS_INDEX.get(distinctive) or key
 
 
 def company_tokens(name: str) -> set[str]:
-    return {t for t in company_key(name).split() if t not in _GENERIC_COMPANY_WORDS and len(t) > 1}
+    return {t for t in company_key(name).split() if t not in _GENERIC_COMPANY_WORDS and (len(t) > 1 or "&" in t)}
 
 
 def companies_match(a: str, b: str) -> bool:
     ta, tb = company_tokens(a), company_tokens(b)
     if not ta or not tb:
-        return False
+        # Nothing distinctive left (e.g. "Emirates"): only an exact normalised match counts.
+        ka, kb = company_key(a), company_key(b)
+        return bool(ka) and ka == kb
     return ta <= tb or tb <= ta
