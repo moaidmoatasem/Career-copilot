@@ -60,13 +60,10 @@ _PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
         ),
     ),
     (
+        # Payment channels scammers use. Fees are judged separately, by who is asked to pay (_fee_request).
         "scam_signal",
         "warning",
-        re.compile(
-            r"\b(?:(?:visa|processing|registration|training|medical|placement|application|security deposit)\s+fees?"
-            r"|pay\s+(?:a|the|an)\s+(?:small\s+)?fee|western union|moneygram|gift cards?|crypto(?:currency)? payment)\b",
-            re.I,
-        ),
+        re.compile(r"\b(?:western union|moneygram|gift cards?|crypto(?:currency)? payment)\b", re.I),
     ),
     (
         "sensitive_document_request",
@@ -188,12 +185,66 @@ def clean_text(text: str, max_len: int | None = None) -> str:
     return text
 
 
+# A fee is a scam signal only when you are the one asked to pay it. Genuine Gulf offers often say
+# the employer covers visa and medical fees, which is the opposite of a scam.
+_FEE = re.compile(
+    r"\b(?:(?:visa|processing|registration|training|medical|placement|application|recruitment|agency"
+    r"|admin(?:istration)?|joining|documentation)\s+)*fees?\b|\bsecurity deposit\b",
+    re.I,
+)
+_PAYMENT_ASK = re.compile(
+    r"\b(?:pay(?:ing|ment|able)?|transfer(?:ring)?|send(?:ing)?|deposit(?:ing)?|wire|remit|must|required"
+    r"|needs? to)\b",
+    re.I,
+)
+_NOT_YOU = r"(?!\s+(?:you|yourself|the candidate|candidates?|the applicant|applicants?)\b)"
+_EMPLOYER_PAYS = re.compile(
+    r"\b(?:covered|reimbursed|waived|sponsored)\b"
+    rf"|\b(?:paid|borne|handled|settled)\s+(?:for\s+)?by\b{_NOT_YOU}"
+    r"|\b(?:we|company|employer|client|organi[sz]ation)\s+(?:will\s+|shall\s+)?(?:fully\s+)?"
+    r"(?:pays?|covers?|handles?|bears?|sponsors?|takes? care of)\b"
+    r"|\b(?:free of charge|at no (?:extra |additional )?cost|no (?:\w+\s+){0,2}fees?"
+    r"|without (?:any )?(?:fees?|cost|charge))\b"
+    r"|\bnever\s+(?:\w+\s+){0,4}(?:pay|ask|charge|request|require)\w*"
+    r"|\b(?:do|does|will|shall)\s*(?:not|n't)\s+(?:ask|charge|request|require)\w*",
+    re.I,
+)
+_NEGATED = re.compile(r"(?:\bnot|n't)\s+(?:\w+\s+)?$", re.I)  # "not covered", "isn't fully covered"
+_SENTENCE = re.compile(r"[^.!?;\n]+")
+
+
+def _gap(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return max(0, b[0] - a[1], a[0] - b[1])
+
+
+def _fee_request(text: str) -> tuple[int, int] | None:
+    """Span of a fee you are asked to pay: a request to pay sits nearer the fee than any sign the employer pays."""
+    for sentence in _SENTENCE.finditer(text):
+        part, offset = sentence.group(), sentence.start()
+        fees = [m.span() for m in _FEE.finditer(part)]
+        if not fees:
+            continue
+        benign, asks = [], []
+        for m in _EMPLOYER_PAYS.finditer(part):
+            # "not covered" means you pay.
+            (asks if _NEGATED.search(part[: m.start()]) else benign).append(m.span())
+        asks += [m.span() for m in _PAYMENT_ASK.finditer(part)
+                 if not any(_gap(m.span(), other) == 0 for other in benign + fees)]
+        for fee in fees:
+            ask = min((_gap(fee, a) for a in asks), default=None)
+            calm = min((_gap(fee, b) for b in benign), default=None)
+            if ask is not None and (calm is None or ask <= calm):
+                return offset + fee[0], offset + fee[1]
+    return None
+
+
 def detect_flags(text: str) -> list[dict[str, str]]:
     flags: list[dict[str, str]] = []
     for flag_type, severity, pattern in _PATTERNS:
         match = pattern.search(text)
-        if match:
-            start, end = max(0, match.start() - 30), min(len(text), match.end() + 30)
+        span = match.span() if match else _fee_request(text) if flag_type == "scam_signal" else None
+        if span:
+            start, end = max(0, span[0] - 30), min(len(text), span[1] + 30)
             excerpt = " ".join(text[start:end].split())
             flags.append({"type": flag_type, "severity": severity, "excerpt": excerpt[:120]})
     return flags

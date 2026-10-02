@@ -77,6 +77,13 @@ def test_scam_message_is_marked_suspicious():
     assert result.inbox_items[0]["category"] == "suspicious"
 
 
+def test_genuine_gulf_offer_is_not_suspicious():
+    body = ("Hi, we'd like to move forward with you for the Senior QA role in Dubai. "
+            "Visa fees are covered by the company and we handle your work permit.")
+    result = parse_email(MESSAGES, "Sara Ahmed sent you a new message", body)
+    assert result.inbox_items[0]["category"] != "suspicious"
+
+
 def test_invitation_and_job_board_and_digest():
     invite = parse_email("LinkedIn <invitations@linkedin.com>", "Omar Khaled wants to connect", "Omar Khaled\nQA Manager")
     assert invite.kind == "invitation" and invite.inbox_items[0]["sender"] == "Omar Khaled"

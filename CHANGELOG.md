@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   form.
 
 ### Fixed
+- F4: a fee is a scam signal only when you are asked to pay it; offers where the employer covers visa or medical fees are no longer flagged.
 
 - **LinkedIn's sharded CSVs are read in full.** LinkedIn splits large tables across numbered files
   (`Saved Jobs.csv`, `Saved Jobs_1.csv`, …) and the reader kept only the first one it saw, so accounts
