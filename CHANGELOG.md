@@ -58,8 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   form.
 
 ### Fixed
-- F4: a fee is a scam signal only when you are asked to pay it; offers where the employer covers visa or medical fees are no longer flagged.
-
 - **LinkedIn's sharded CSVs are read in full.** LinkedIn splits large tables across numbered files
   (`Saved Jobs.csv`, `Saved Jobs_1.csv`, …) and the reader kept only the first one it saw, so accounts
   large enough to be sharded silently lost the rest — connections and messages included, not just
@@ -76,6 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **Genuine Gulf offers are no longer flagged as scams (F4).** The scam rule fired on "visa fee"
+  whoever paid it, so an offer saying "visa fees are covered by the company" was flagged and its email
+  filed as suspicious. A fee is now a scam signal only when you are asked to pay it: a request to pay
+  (pay, transfer, send, deposit, must) sits nearer the fee than any sign the employer pays (covered,
+  paid by the company, we handle, no fees). "Not covered" counts as a request to pay. Western Union,
+  MoneyGram, gift cards and crypto payments are still flagged wherever they appear.
 - **Alternatives are read the way posts write them (F3).** Only a pair joined by "or" or "/" was
   treated as a choice. So "Playwright (or Selenium)" made Selenium a separate requirement, and
   "Jenkins, GitLab CI or GitHub Actions" grouped only the last two. The parser now reads the whole
