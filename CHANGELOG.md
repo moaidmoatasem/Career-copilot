@@ -74,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **Recruiter messages are recognised without the word "role" or "job" (F5).** "We have a QA Lead
+  opening at STC and your profile stands out" matched none of the recruiter words, so it was filed
+  as other, at normal priority, and an Arabic recruiter message never could be. The recruiter words now
+  include "opening", "we are looking for" and "your profile", plus Arabic terms such as وظيفة, فرصة عمل,
+  توظيف, شاغر and نبحث عن, matched inside words because Arabic attaches prefixes such as ال.
 - **Genuine Gulf offers are no longer flagged as scams (F4).** The scam rule fired on "visa fee"
   whoever paid it, so an offer saying "visa fees are covered by the company" was flagged and its email
   filed as suspicious. A fee is now a scam signal only when you are asked to pay it: a request to pay

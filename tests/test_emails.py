@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
-from career_copilot.emails import classify, parse_email
+import pytest
+
+from career_copilot.emails import categorize, classify, parse_email
 
 JOB_ALERT_TEXT = """Your job alert for Senior QA Engineer in United Arab Emirates
 3 new jobs match your preferences.
@@ -75,6 +77,35 @@ def test_scam_message_is_marked_suspicious():
     body = "Congratulations! You are selected for a QA role in Doha. Pay the visa processing fee to confirm."
     result = parse_email(MESSAGES, "Sara Ahmed sent you a new message", body)
     assert result.inbox_items[0]["category"] == "suspicious"
+
+
+# F5: recruiter messages that name no "role" or "job" were filed as other, normal priority.
+STC_MESSAGE = ("Hi Moaid, we have a QA Lead opening at STC in Riyadh and your profile stands out. "
+               "Would you be open to a quick call this week?")
+ARABIC_MESSAGE = "مرحباً معيد، لدينا فرصة عمل في فريق ضمان الجودة في الرياض. هل أنت مهتم بالتواصل؟"
+
+
+@pytest.mark.parametrize("body", [STC_MESSAGE, ARABIC_MESSAGE], ids=["stc", "arabic"])
+def test_recruiter_messages_are_recruiter_high_priority(body):
+    result = parse_email(MESSAGES, "Khalid Al-Otaibi sent you a new message", body)
+    item = result.inbox_items[0]
+    assert (item["category"], item["priority"]) == ("recruiter", "high")
+
+
+@pytest.mark.parametrize("text", [
+    "Two openings in our Dubai test team, interested?",
+    "We are looking for a Senior SDET to lead our mobile automation.",
+    "Saw your profile and thought of our new QA team in Doha.",
+    "نبحث عن مهندس اختبار آلي، هل الوظيفة تناسبك؟",
+    "عندنا وظائف شاغرة في جدة",
+])
+def test_recruiter_phrasing(text):
+    assert categorize(text, []) == ("recruiter", "high")
+
+
+def test_new_recruiter_words_do_not_swallow_sales_or_networking():
+    assert categorize("Join the grand opening webinar and book a demo of our services", [])[0] == "sales_pitch"
+    assert categorize("Thanks for connecting, great to connect!", [])[0] == "networking"
 
 
 def test_genuine_gulf_offer_is_not_suspicious():
