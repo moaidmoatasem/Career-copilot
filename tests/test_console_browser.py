@@ -136,6 +136,18 @@ def _pending(cp) -> list[dict]:
 
 # ---------------------------------------------------------------------------- review
 
+def test_review_page_shows_the_message_you_are_replying_to(ui):
+    ui.cp.ingest_email(MESSAGES, "Sara Ahmed sent you a new message", MESSAGE, now_rfc2822())
+    item = ui.cp.list_inbox()["items"][0]
+    draft_id = ui.cp.draft_message_reply(item["id"], "Thanks Sara, happy to talk on Tuesday.", "reply")["draft_id"]
+    ui.go(f"/review/{draft_id}")
+    context = ui.page.locator("#reply-context")
+    assert context.is_visible()
+    assert "Sara Ahmed" in context.inner_text()
+    assert "opportunity in Dubai" in context.inner_text()
+    assert "inbox:" not in ui.page.content()
+
+
 def test_approve_needs_every_box_ticked_then_approves(ui):
     draft_id = ui.cp.draft_post("We reduced regression time by 40% last quarter. Details: https://example.com",
                                 "idea")["draft_id"]

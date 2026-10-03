@@ -403,7 +403,7 @@ list new jobs by tier, tell me who needs a reply, and draft replies for my revie
 
 # ---------------------------------------------------------------------------- Review
 
-def _draft_row(d: dict) -> str:
+def _draft_row(d: dict, label: str) -> str:
     checks = d["checks"]
     chips = []
     if checks.get("claims_to_verify"):
@@ -412,8 +412,8 @@ def _draft_row(d: dict) -> str:
         chips.append(f'<span class="chip">{len(checks["outbound_links"])} link(s)</span>')
     if checks.get("flags"):
         chips.append('<span class="chip bad">flag</span>')
-    target = esc(d["target"] or "—")
-    return (f'<tr><td><a href="/review/{d["id"]}">#{d["id"]} · {esc(d["kind"])}</a></td>'
+    target = esc(label)
+    return (f'<tr><td><a href="/review/{d["id"]}">#{d["id"]} · {esc(d["kind"].replace("_", " "))}</a></td>'
             f'<td>{target}</td><td>{esc(_age(d["created_at"]))}</td><td>{"".join(chips)}</td></tr>')
 
 
@@ -441,7 +441,7 @@ def review_list(request: Request) -> HTMLResponse:
         table = f'<p class="muted">{esc(empty)}</p>'
     else:
         table = ('<table><thead><tr><th>Draft</th><th>Target</th><th>Age</th><th>Needs attention</th></tr></thead>'
-                  f'<tbody>{"".join(_draft_row(d) for d in rows)}</tbody></table>')
+                  f'<tbody>{"".join(_draft_row(d, cp.draft_context(d)["label"]) for d in rows)}</tbody></table>')
     body = f'{banner_from_query(request)}<div class="tabs">{tab_html}</div><div class="card">{table}</div>'
     return layout(request, title="Review", active="/review", body=body)
 
@@ -534,16 +534,29 @@ def review_detail(request: Request) -> Response:
         note = d.get("reviewer_note") or ""
         actions = f'<div class="card"><p class="muted">{esc(status.capitalize())}{": " + esc(note) if note else ""}.</p></div>'
     rationale = f'<p class="muted">Why Claude drafted this: {esc(d["rationale"])}</p>' if d.get("rationale") else ""
+    context = cp.draft_context(d)
+    original = context["original"]
+    context_block = ""
+    if original:
+        flagged = ' <span class="chip bad">flag</span>' if original["flagged"] else ""
+        subject = f'<div class="muted">{esc(original["subject"])}</div>' if original["subject"] else ""
+        context_block = f"""
+<div class="card" id="reply-context">
+  <h2>You are replying to {esc(original['sender'])}{flagged}</h2>
+  {subject}
+  <div class="external"><span class="src">their message, from {esc(original['source'])} · {esc(_age(original['received_at']))}</span>{esc(original['preview'])}</div>
+</div>"""
     body = f"""
 {banner_from_query(request)}
 <div class="row spread">
-  <div><span class="ai-chip">AI-generated</span> <strong>Draft #{draft_id} · {esc(d['kind'])}</strong>
-    <span class="muted">target: {esc(d['target'] or '—')} · {esc(_age(d['created_at']))}</span></div>
+  <div><span class="ai-chip">AI-generated</span> <strong>Draft #{draft_id} · {esc(d['kind'].replace('_', ' '))}</strong>
+    <span class="muted">{esc(context['label'])} · {esc(_age(d['created_at']))}</span></div>
   <div class="row">{nav_links}</div>
 </div>
 {rationale}
 <p class="banner warn">Read this fully and check for inaccuracies before approving. Claude cannot approve, edit
 history, or send anything — only you can, here or in <code>career-copilot review</code>.</p>
+{context_block}
 {content_block}
 {actions}
 """
