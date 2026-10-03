@@ -74,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy was silently dropping the red on flag, overdue and missing-skill chips, the layout of the
   review checklist, and spacing around buttons. Styling now lives in the stylesheet as classes, a test
   keeps `style=` out of the Console, and the favicon request no longer logs a 404.
+- **The review screen shows what you are replying to (F7).** A reply draft showed only Claude's text and a
+  target that read "inbox:1", so you approved a reply without seeing the message it answered. The review
+  page now has a "You are replying to Sara Ahmed" pane with their message (escaped, like all external text,
+  and marked if it was flagged), and every draft names its target in plain words: "Reply to Sara Ahmed",
+  "Application for Senior QA Engineer at Acme Cloud", "Your headline". The review queue uses the same names.
 - **Recruiter messages are recognised without the word "role" or "job" (F5).** "We have a QA Lead
   opening at STC and your profile stands out" matched none of the recruiter words, so it was filed
   as other, at normal priority, and an Arabic recruiter message never could be. The recruiter words now

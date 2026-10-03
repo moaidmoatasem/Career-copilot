@@ -1022,6 +1022,44 @@ class Copilot:
             raise CopilotError(f"draft {draft_id} not found")
         return drafts.public_view(row)
 
+    def draft_context(self, draft: dict) -> dict:
+        """What a draft is about, in plain words, for the review screen.
+
+        `label` replaces the internal target ("inbox:1", "job:3"). For a reply, `original` is the message
+        being answered (external text: the caller must escape it).
+        """
+        kind, target = draft["kind"], draft["target"] or ""
+        if kind == "message_reply" and target.startswith("inbox:"):
+            item = self.store.one("SELECT * FROM inbox_items WHERE id = ?", (int(target.split(":")[1]),))
+            if item is None:
+                return {"label": "A message that is no longer stored", "original": None}
+            sender = item["sender"] or "an unknown sender"
+            return {"label": f"Reply to {sender}",
+                    "original": {"sender": sender, "subject": item["subject"], "preview": item["preview"],
+                                 "source": item["source"], "received_at": item["received_at"],
+                                 "flagged": bool(json.loads(item["flags_json"] or "[]"))}}
+        if kind == "application" and target.startswith("job:"):
+            job = self.store.one("SELECT title, company FROM jobs WHERE id = ?", (int(target.split(":")[1]),))
+            label = f"Application for {job['title']} at {job['company']}" if job else "An application"
+            return {"label": label, "original": None}
+        if kind == "outreach" and target.startswith("person:"):
+            person = target.split("|")[0].split(":", 1)[1]
+            what = "Connection note" if draft.get("channel") == "connection_note" else "Message"
+            return {"label": f"{what} to {person}", "original": None}
+        if kind == "profile_edit" and target.startswith("profile:"):
+            section = target.split(":", 1)[1]
+            names = {"headline": "Your headline", "about": "Your About section", "skills": "Your skills"}
+            if section in names:
+                return {"label": names[section], "original": None}
+            index = section.split(":")[1] if section.startswith("experience:") else ""
+            return {"label": f"Your experience entry {int(index) + 1}" if index.isdigit() else "Your profile",
+                    "original": None}
+        if kind == "post":
+            return {"label": "A new post", "original": None}
+        if kind == "comment":
+            return {"label": f"A comment on {target}" if target else "A comment", "original": None}
+        return {"label": kind.replace("_", " ").capitalize(), "original": None}
+
     def how_to_execute(self, row: dict) -> str:
         kind, target = row["kind"], row["target_ref"]
         if kind == "message_reply" and target.startswith("inbox:"):
