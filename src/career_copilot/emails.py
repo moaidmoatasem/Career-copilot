@@ -37,8 +37,12 @@ _BOILERPLATE = re.compile(
 )
 
 _RECRUITER = re.compile(
-    r"\b(opportunit(?:y|ies)|role|position|vacanc(?:y|ies)|hiring|interview|recruit(?:er|ing|ment)?"
-    r"|talent acquisition|headhunt\w*|job|offer|salary|package|cv|resume|relocat\w*|notice period)\b",
+    r"\b(opportunit(?:y|ies)|role|position|vacanc(?:y|ies)|openings?|hiring|interview|recruit(?:er|ing|ment)?"
+    r"|talent acquisition|headhunt\w*|job|offer|salary|package|cv|resume|relocat\w*|notice period"
+    r"|we(?:'re| are) looking for|your (?:profile|background))\b"
+    # Arabic attaches prefixes (ال, ب, ل, و) to words, so these match inside a word, not at a boundary:
+    # job/jobs, job opportunity, hiring, vacant, interview, CV, we are looking for, salary.
+    r"|(وظيف|وظائف|فرصة عمل|فرص عمل|توظيف|شاغر|مقابلة|سيرة ذاتية|السيرة الذاتية|سيرتك الذاتية|نبحث عن|راتب)",
     re.I,
 )
 _SALES = re.compile(
